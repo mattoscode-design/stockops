@@ -1,6 +1,11 @@
+"""
+Report Service — Geração de relatórios executivos via Gemini Flash com fallback estático.
+"""
+
 import logging
 import os
 import google.generativeai as genai
+from services.context_builder import build_context_for_report
 
 logger = logging.getLogger("stockops.report")
 
@@ -32,52 +37,83 @@ DADOS DA ANÁLISE:
 """
 
 
-def _build_context(summary: dict) -> str:
-    categorias = summary.get("categorias", [])
-    urgentes = [r for r in summary["resultados"] if r["classificacao"] == "Urgente"]
-    acao = [r for r in summary["resultados"] if r["classificacao"] == "Ação Recomendada"]
-
-    lines = [
-        f"Total de SKUs: {summary['total_skus']}",
-        f"SKUs críticos (score ≥ 71): {summary['skus_criticos']}",
-        f"Perda total estimada: R$ {summary['perda_total_estimada']:,.2f}",
-        f"Categorias: {', '.join(categorias) if categorias else 'Não informadas'}",
-        f"Urgentes: {len(urgentes)} · Ação Recomendada: {len(acao)}",
-        "",
-        "Top 10 SKUs por risco:",
-    ]
-
-    for r in summary["resultados"][:10]:
-        lines.append(
-            f"  - {r['sku']} | {r.get('categoria', '-')} | {r['loja']} | "
-            f"Score {r['score_ruptura']} | {r['classificacao']} | "
-            f"Cobertura {r['cobertura_dias']}d | Perda R$ {r['perda_estimada_reais']:,.2f} | "
-            f"ABC: {r.get('curva_abc', '-')}"
-        )
-
-    if len(summary["resultados"]) > 10:
-        lines.append(f"  ... e mais {len(summary['resultados']) - 10} SKUs.")
-
-    return "\n".join(lines)
-
-
 def gerar_relatorio(summary: dict) -> str:
-    context = _build_context(summary)
+    """
+    Gera relatório executivo usando Gemini Flash com fallback estático.
+    
+    Args:
+        summary: AnalysisSummary contendo resultados e métricas
+        
+    Returns:
+        String com relatório em markdown formatado
+    """
+    context = build_context_for_report(summary)
     prompt = REPORT_PROMPT.format(context=context)
 
     try:
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
-        logger.error("Erro ao gerar relatório: %s", str(e))
-        skus_criticos = summary.get("skus_criticos", 0)
-        perda = summary.get("perda_total_estimada", 0)
-        return (
-            f"## Situação Geral\n"
-            f"Análise concluída: {summary.get('total_skus', 0)} SKUs processados. "
-            f"{skus_criticos} em estado crítico com perda estimada de R$ {perda:,.2f}.\n\n"
-            f"## Recomendações Prioritárias\n"
-            f"Revise os SKUs marcados como Urgente e Ação Recomendada na aba Ranking.\n\n"
+        logger.error(f"Erro ao gerar relatório via Gemini: {str(e)}")
+        return gerar_relatorio_estatico(summary)
+
+
+def gerar_relatorio_estatico(summary: dict) -> str:
+    """
+    Fallback estático quando Gemini falha.
+    Gera relatório estruturado sem chamada a API.
+    
+    Args:
+        summary: AnalysisSummary
+        
+    Returns:
+        String com relatório formatado em markdown
+    """
+    skus_criticos = summary.get("skus_criticos", 0)
+    total_skus = summary.get("total_skus", 0)
+    perda = summary.get("perda_total_estimada", 0)
+    categorias = summary.get("categorias", [])
+    
+    # Contar por classificação
+    urgentes = len([r for r in summary.get("resultados", []) if r["classificacao"] == "Urgente"])
+    acao = len([r for r in summary.get("resultados", []) if r["classificacao"] == "Ação Recomendada"])
+    alerta = len([r for r in summary.get("resultados", []) if r["classificacao"] == "Alerta"])
+    
+    lines = [
+        "## Situação Geral",
+        f"Análise concluída: {total_skus} SKUs processados.",
+        f"{skus_criticos} SKUs em estado crítico (score ≥ 71) com perda estimada de R$ {perda:,.2f}.",
+        f"Distribuição: {urgentes} Urgentes · {acao} Ação Recomendada · {alerta} Alertas.",
+        "",
+        "## Principais Riscos",
+        "Revise os SKUs marcados como Urgente e Ação Recomendada na aba Ranking para detalhes completos.",
+        "",
+        "## Recomendações Prioritárias",
+        "1. Priorize reposição dos SKUs Urgentes imediatamente.",
+        "2. Monitorar SKUs em estado Ação Recomendada diariamente.",
+        "3. Revisar frequência de abastecimento das categorias mais críticas.",
+        "",
+        "## Análise por Categoria",
+    ]
+    
+    if categorias:
+        for cat in categorias:
+            cat_skus = [r for r in summary.get("resultados", []) if r.get("categoria") == cat]
+            if cat_skus:
+                cat_urgentes = len([r for r in cat_skus if r["classificacao"] == "Urgente"])
+                cat_avg_score = sum(r["score_ruptura"] for r in cat_skus) / len(cat_skus)
+                lines.append(f"- **{cat}**: {len(cat_skus)} SKUs, {cat_urgentes} Urgentes, Score médio {cat_avg_score:.1f}")
+    else:
+        lines.append("Sem dados de categorias disponíveis.")
+    
+    lines.extend([
+        "",
+        "## Próximos 7 Dias",
+        "- Executar reposição conforme quantidade recomendada na planilha.",
+        "- Rastrear cobertura diária dos SKUs críticos.",
+    ])
+    
+    return "\n".join(lines)
             f"## Próximos 7 Dias\n"
             f"Priorize a reposição dos SKUs com menor cobertura e maior perda estimada."
         )
