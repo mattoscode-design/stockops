@@ -1,0 +1,25 @@
+sku,loja,categoria,estoque_atual,vendas_diarias,preco_medio,promocao_planejada
+Energético 473ml,Loja SP-Norte,Bebidas,45,18.5,7.90,0.0
+Energético 473ml,Loja SP-Sul,Bebidas,12,16.2,7.90,0.20
+Refrigerante PET 2L,Loja RJ-Centro,Bebidas,8,22.0,9.50,0.0
+Refrigerante PET 2L,Loja RJ-Zona Sul,Bebidas,180,19.5,9.50,0.0
+Água Mineral 500ml,Loja MG-BH,Bebidas,3,31.0,2.80,0.0
+Suco Integral 1L,Loja SP-Leste,Bebidas,22,8.0,12.50,0.15
+Isotônico 500ml,Loja SP-Norte,Bebidas,0,14.0,8.90,0.0
+Cerveja Long Neck,Loja RJ-Barra,Bebidas,55,24.5,6.50,0.30
+Cerveja Long Neck,Loja SP-Sul,Bebidas,6,28.0,6.50,0.30
+Leite Integral 1L,Loja MG-BH,Laticínios,90,45.0,4.20,0.0
+Iogurte Natural 170g,Loja SP-Norte,Laticínios,14,9.5,3.80,0.0
+Achocolatado 200ml,Loja RJ-Centro,Laticínios,5,21.0,2.50,0.0
+Macarrão Espaguete 500g,Loja MG-BH,Alimentos,60,12.0,4.10,0.0
+Arroz Branco 5kg,Loja SP-Sul,Alimentos,110,30.5,22.90,0.0
+Feijão Carioca 1kg,Loja RJ-Barra,Alimentos,8,18.0,8.70,0.0
+Azeite Extra Virgem 500ml,Loja SP-Leste,Alimentos,2,6.5,32.50,0.0
+Café Torrado 500g,Loja SP-Norte,Alimentos,18,11.0,19.90,0.10
+Biscoito Cream Cracker,Loja RJ-Zona Sul,Alimentos,33,14.0,4.30,0.0
+Detergente Líquido 500ml,Loja MG-BH,Limpeza,70,22.5,2.90,0.0
+Shampoo 400ml,Loja SP-Sul,Higiene,4,9.0,18.50,0.0
+Condicionador 400ml,Loja SP-Norte,Higiene,2,7.5,19.90,0.0
+Sabonete Líquido 250ml,Loja RJ-Centro,Higiene,35,12.0,8.90,0.0
+Papel Higiênico 12un,Loja MG-BH,Limpeza,25,18.0,16.50,0.0
+Sabão em Pó 1kg,Loja SP-Leste,Limpeza,6,9.5,14.90,0.0

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Ambiente
+.env
+backend/.env
+
+# Banco local
+*.db
+
+# Uploads temporários
+backend/uploads/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Build
+dist/
+build/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
