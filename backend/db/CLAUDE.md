@@ -14,6 +14,9 @@ Migrar o StockOps de SQLite em memória para Supabase PostgreSQL com:
 3. Persistência de usuários e inventário
 4. Connection pooling configurado
 
+**Status:** DESBLOQUEADO em 2026-05-14 — Supabase criado, DATABASE_URL disponível no `.env`
+**Project ref Supabase:** `xyzdrvojjjrbbuyxknfv`
+
 ---
 
 ## Estado Atual do Banco
@@ -42,11 +45,14 @@ Este arquivo já existe. Leia-o antes de qualquer trabalho — ele define o sche
 
 ---
 
-## Pré-Requisitos (Aguardando PO)
+## Pré-Requisitos
 
-- [ ] Connection string Supabase: `postgresql://postgres:[senha]@[host]:5432/postgres`
-- [ ] Adicionar ao `.env`: `DATABASE_URL=postgresql://...`
-- [ ] Após conexão: remover `Base.metadata.create_all()` do `main.py`
+- [x] Connection string Supabase — ✅ `DATABASE_URL` adicionada ao `.env` (2026-05-14)
+- [x] Project ref: `xyzdrvojjjrbbuyxknfv`
+- [ ] Executar `001_multi_tenant.sql` no Supabase SQL Editor
+- [ ] Executar seed (tenant demo + usuário admin)
+- [ ] Atualizar `db/database.py` para PostgreSQL
+- [ ] Sinalizar Backend Dev → remover `Base.metadata.create_all()` do `main.py`
 
 ---
 
@@ -191,16 +197,25 @@ print(pwd_context.hash("admin123"))
 ## Sequência de Execução
 
 ```
-1. Receber DATABASE_URL do PO
-2. Adicionar ao backend/.env
-3. Ler 001_multi_tenant.sql
-4. Executar migration no Supabase (dashboard SQL ou psql)
-5. Gerar hash bcrypt para admin123
-6. Executar seed
-7. Atualizar db/database.py para PostgreSQL
-8. Remover Base.metadata.create_all() do main.py
-9. Informar Backend Dev para atualizar middleware/auth.py (USERS dict → SELECT no banco)
-10. Rodar pytest no Backend Dev para confirmar 26/26
+[x] 1. Receber DATABASE_URL do PO — FEITO (2026-05-14)
+[x] 2. Adicionar ao backend/.env — FEITO (2026-05-14)
+[ ] 3. Ler 001_multi_tenant.sql (já existe em backend/db/migrations/)
+[ ] 4. Executar migration no Supabase:
+        Dashboard → projeto xyzdrvojjjrbbuyxknfv → SQL Editor → colar e executar
+[ ] 5. Gerar hash bcrypt para admin123:
+        from passlib.context import CryptContext
+        ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        print(ctx.hash("admin123"))
+[ ] 6. Executar seed:
+        INSERT INTO tenants (name, slug, plan) VALUES ('Demo Distribuidora', 'demo', 'pro');
+        INSERT INTO users (tenant_id, username, password_hash, role)
+            SELECT id, 'admin', '[HASH_GERADO]', 'admin' FROM tenants WHERE slug='demo';
+[ ] 7. Habilitar RLS nas tabelas analyses, inventory_items, inventory_movements
+[ ] 8. Atualizar db/database.py para PostgreSQL (ver seção abaixo)
+[ ] 9. Sinalizar Backend Dev (T4):
+        - Remover Base.metadata.create_all() do main.py
+        - Migrar USERS dict em middleware/auth.py para SELECT no banco
+[ ] 10. Backend Dev roda pytest 26/26 para confirmar
 ```
 
 ---
