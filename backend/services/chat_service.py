@@ -1,26 +1,19 @@
+"""
+Chat Service — Assistente Operacional com validação de domínio restrita.
+Bloqueia perguntas fora do escopo antes de chamar Gemini (economia de tokens).
+"""
+
 import json
 import logging
 import os
 import google.generativeai as genai
+from services.constants import DOMAIN_NOUNS, DOMAIN_CONTEXT
+from services.context_builder import build_context_for_chat
 
 logger = logging.getLogger("stockops.chat")
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-1.5-flash")
-
-# Substantivos do domínio — presença de qualquer um já indica intenção válida
-DOMAIN_NOUNS = {
-    "sku", "loja", "estoque", "ruptura", "cobertura", "abastecimento",
-    "categoria", "produto", "distribuidora", "sell-out", "sellout",
-    "planilha", "giro", "reposição",
-}
-
-# Palavras de contexto — precisam de pelo menos 2 para passar sozinhas
-DOMAIN_CONTEXT = {
-    "venda", "vendas", "repor", "score", "risco", "perda", "região",
-    "prioridade", "urgente", "alerta", "recomendação", "análise",
-    "semana", "crítico", "críticos", "prioritário",
-}
 
 OUT_OF_SCOPE_REPLY = (
     "Sou o Assistente Operacional do StockOps. "
@@ -46,45 +39,57 @@ DADOS DA ANÁLISE ATUAL:
 
 
 def _is_in_scope(question: str) -> bool:
+    """
+    Valida se pergunta está dentro do escopo operacional.
+
+    Retorna True se:
+      - Contém pelo menos 1 substantivo do domínio (sku, loja, estoque, etc.), OU
+      - Contém pelo menos 2 palavras de contexto (risco, urgente, perda, etc.)
+
+    Args:
+        question: Pergunta do usuário
+
+    Returns:
+        bool: True se dentro do escopo, False caso contrário
+    """
     words = set(question.lower().split())
     has_noun = bool(words & DOMAIN_NOUNS)
     context_count = len(words & DOMAIN_CONTEXT)
     return has_noun or context_count >= 2
 
 
-def _build_context(summary: dict) -> str:
-    categorias = summary.get("categorias", [])
-    lines = [
-        f"Total de SKUs analisados: {summary['total_skus']}",
-        f"SKUs críticos (score ≥ 71): {summary['skus_criticos']}",
-        f"Perda total estimada: R$ {summary['perda_total_estimada']:,.2f}",
-        f"Categorias: {', '.join(categorias) if categorias else 'Não informadas'}",
-        "",
-        "Top 5 SKUs por risco:",
-    ]
-    for r in summary["resultados"][:5]:
-        cat = r.get("categoria", "-")
-        lines.append(
-            f"  - {r['sku']} | Cat: {cat} | Loja: {r['loja']} | "
-            f"Score {r['score_ruptura']} | {r['classificacao']} | "
-            f"Cobertura {r['cobertura_dias']}d | Perda R$ {r['perda_estimada_reais']:,.2f}"
-        )
-    if len(summary["resultados"]) > 5:
-        lines.append(f"  ... e mais {len(summary['resultados']) - 5} SKUs.")
-    return "\n".join(lines)
-
-
 def responder(question: str, summary: dict) -> str:
+    """
+    Responde pergunta do usuário usando Gemini com validação de domínio.
+
+    Fluxo:
+      1. Valida se pergunta está no escopo
+      2. Se não: retorna mensagem padrão (economia de tokens)
+      3. Se sim: injeta contexto + pergunta → Gemini Flash
+
+    Args:
+        question: Pergunta do usuário
+        summary: AnalysisSummary com dados da análise
+
+    Returns:
+        String com resposta formatada
+    """
     if not _is_in_scope(question):
-        logger.info("Pergunta fora do escopo bloqueada: %s", question[:80])
+        logger.info(f"Pergunta fora do escopo bloqueada: {question[:80]}")
         return OUT_OF_SCOPE_REPLY
 
-    context = _build_context(summary)
-    prompt = SYSTEM_PROMPT.format(context=context) + f"\n\nPergunta do usuário: {question}"
+    context = build_context_for_chat(summary)
+    prompt = (
+        SYSTEM_PROMPT.format(context=context) + f"\n\nPergunta do usuário: {question}"
+    )
 
     try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        response = model.generate_content(prompt, timeout=15)
+        result = response.text.strip()
+        logger.info(f"Resposta gerada: {len(result)} chars")
+        return result
     except Exception as e:
-        logger.error("Erro ao chamar Gemini: %s", str(e))
-        return "Não consegui processar sua pergunta agora. Tente novamente em instantes."
+        logger.error(f"Erro ao chamar Gemini: {str(e)}")
+        return (
+            "Não consegui processar sua pergunta agora. Tente novamente em instantes."
+        )
