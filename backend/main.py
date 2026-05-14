@@ -1,15 +1,15 @@
+from dotenv import load_dotenv
+load_dotenv()  # Deve rodar antes de qualquer import que leia variáveis de ambiente
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
-from dotenv import load_dotenv
 import os
 
 from db.database import engine, Base
 from middleware.rate_limit import limiter
 from routers import auth, analysis, chat, api_v1
-
-load_dotenv()
 
 Base.metadata.create_all(bind=engine)
 
