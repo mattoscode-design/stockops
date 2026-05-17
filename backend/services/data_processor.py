@@ -4,6 +4,7 @@ Consolida lógica de carregamento de CSV/Excel, normalização e cálculos opera
 """
 
 import logging
+import unicodedata
 from io import BytesIO
 import pandas as pd
 import numpy as np
@@ -65,10 +66,14 @@ def load_file(file_bytes: bytes, filename: str) -> pd.DataFrame:
             status_code=400, detail="Erro ao ler o arquivo. Verifique o formato."
         )
 
-    # Normalizar nomes de colunas
-    df.columns = [
-        c.strip().lower().replace(" ", "_").replace("-", "_") for c in df.columns
-    ]
+    # Normalizar nomes de colunas — remove acentos, lowercase, espaços → underscore
+    def _normalize_col(name: str) -> str:
+        name = name.strip().lower()
+        name = unicodedata.normalize("NFD", name)
+        name = "".join(c for c in name if unicodedata.category(c) != "Mn")
+        return name.replace(" ", "_").replace("-", "_")
+
+    df.columns = [_normalize_col(c) for c in df.columns]
 
     # Validar colunas obrigatórias
     missing = REQUIRED_COLUMNS - set(df.columns)

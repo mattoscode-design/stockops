@@ -5,7 +5,7 @@ Auth Router — Endpoints de autenticação com rate limiting anti brute-force.
 import logging
 from fastapi import APIRouter, HTTPException, status, Request
 from models.schemas import Token, UserLogin
-from middleware.auth import USERS, verify_password, create_token
+from middleware.auth import get_user, verify_password, create_token
 from middleware.rate_limit import limiter
 
 logger = logging.getLogger("stockops.auth")
@@ -32,7 +32,7 @@ def login(request: Request, data: UserLogin):
         HTTPException 401: Se credenciais inválidas
         HTTPException 429: Se rate limit excedido
     """
-    user = USERS.get(data.username)
+    user = get_user(data.username)
     if not user or not verify_password(data.password, user["password"]):
         logger.warning(
             f"Tentativa de login falhou para {data.username} de {request.client.host}"
@@ -41,6 +41,11 @@ def login(request: Request, data: UserLogin):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas"
         )
 
-    token = create_token({"sub": data.username, "role": user["role"]})
+    token = create_token({
+        "sub": data.username,
+        "role": user["role"],
+        "tenant_id": user["tenant_id"],
+        "user_id": user["user_id"],
+    })
     logger.info(f"Login bem-sucedido para {data.username}")
     return {"access_token": token, "token_type": "bearer"}

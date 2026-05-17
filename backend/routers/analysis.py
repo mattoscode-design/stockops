@@ -4,6 +4,7 @@ from middleware.auth import get_current_user
 from middleware.rate_limit import limiter
 from services.data_processor import load_file
 from services.pipeline_service import run_analysis_pipeline
+from routers.analyses import save_analysis
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -24,4 +25,11 @@ async def upload_and_analyze(
         raise HTTPException(status_code=400, detail="Arquivo excede o limite de 10 MB")
 
     df = load_file(content, filename)
-    return run_analysis_pipeline(df)
+    summary = run_analysis_pipeline(df)
+
+    # Persistência não-bloqueante: falha no save não interrompe a resposta
+    tenant_id = current_user.get("tenant_id")
+    if tenant_id:
+        save_analysis(summary, tenant_id, current_user.get("user_id"))
+
+    return summary

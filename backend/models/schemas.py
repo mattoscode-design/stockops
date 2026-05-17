@@ -39,3 +39,47 @@ class UserLogin(BaseModel):
         if not v.strip():
             raise ValueError("Campo obrigatório")
         return v
+
+
+class AnalysisRecord(BaseModel):
+    """Representa uma análise persistida no Supabase (resposta dos endpoints GET)."""
+    id: str
+    tenant_id: str
+    user_id: str | None = None
+    created_at: str
+    total_skus: int
+    skus_criticos: int
+    perda_total_estimada: float
+    relatorio: str
+    resultados: list[dict]
+
+
+class InventoryItemCreate(BaseModel):
+    sku: str
+    loja: str
+    categoria: str = "Sem Categoria"
+    estoque_atual: float
+    vendas_diarias: float
+    preco_medio: float
+
+
+class InventoryItemUpdate(BaseModel):
+    sku: str | None = None
+    loja: str | None = None
+    categoria: str | None = None
+    estoque_atual: float | None = None
+    vendas_diarias: float | None = None
+    preco_medio: float | None = None
+
+
+class MovementCreate(BaseModel):
+    tipo: str
+    quantidade: float
+    motivo: str | None = None
+
+    @field_validator("tipo")
+    @classmethod
+    def valid_tipo(cls, v: str) -> str:
+        if v not in ("entrada", "saida"):
+            raise ValueError("tipo deve ser 'entrada' ou 'saida'")
+        return v
