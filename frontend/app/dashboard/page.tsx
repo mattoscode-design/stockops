@@ -12,6 +12,7 @@ import HistoryPanel from "@/components/HistoryPanel";
 import ReportSection from "@/components/ReportSection";
 import ChatBot from "@/components/ChatBot";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import EmptyState from "@/components/EmptyState";
 import { SkeletonCharts, SkeletonTable } from "@/components/SkeletonLoader";
 import ScoreHistory from "@/components/ScoreHistory";
 import InventoryManager, { useImportToInventory } from "@/components/InventoryManager";
@@ -248,6 +249,14 @@ function DashboardInner() {
               <ReportSection relatorio={result.relatorio ?? "Relatório não disponível."} />
             </ErrorBoundary>
           </div>
+        )}
+
+        {/* ── PAINEL VAZIO ────────────────────────────────── */}
+        {tab === "painel" && !result && (
+          <EmptyState
+            onImportClick={() => setTab("importar")}
+            onManualClick={() => setTab("manual")}
+          />
         )}
 
         {/* ── RANKING ─────────────────────────────────────── */}

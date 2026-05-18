@@ -23,9 +23,26 @@ export default function Navbar({ username, criticos = 0 }: Props) {
 
         {/* Logo + título */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontFamily: "monospace", fontSize: 13, letterSpacing: "0.22em", fontWeight: 800, color: "var(--amber)" }}>
+          <button
+            onClick={() => router.push("/")}
+            style={{
+              fontFamily: "monospace",
+              fontSize: 13,
+              letterSpacing: "0.22em",
+              fontWeight: 800,
+              color: "var(--amber)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              transition: "opacity 0.2s",
+            }}
+            onMouseOver={e => (e.currentTarget.style.opacity = "0.8")}
+            onMouseOut={e => (e.currentTarget.style.opacity = "1")}
+            aria-label="Voltar para home"
+          >
             STOCKOPS
-          </span>
+          </button>
           <div style={{ width: 1, height: 16, background: "var(--border)" }} />
           <span style={{ fontSize: 12, color: "var(--muted)" }}>
             Sistema de Inteligência Operacional
