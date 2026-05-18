@@ -177,3 +177,84 @@ class TestSaveAnalysis:
 
         assert result is not None
         assert result["id"] == "analysis-001"
+
+
+# ────────────────────────────────────────────────────────────
+# DELETE /analyses/{id}
+# ────────────────────────────────────────────────────────────
+
+class TestDeleteAnalysis:
+    def test_deleta_analise_com_sucesso(self, app_client):
+        client, mock_sb = app_client
+        (mock_sb.table.return_value.delete.return_value
+         .eq.return_value.eq.return_value
+         .execute.return_value) = MagicMock(data=[MOCK_RECORD])
+
+        resp = client.delete("/analyses/analysis-001")
+        assert resp.status_code == 204
+
+    def test_404_quando_nao_encontrado(self, app_client):
+        client, mock_sb = app_client
+        (mock_sb.table.return_value.delete.return_value
+         .eq.return_value.eq.return_value
+         .execute.return_value) = MagicMock(data=[])
+
+        resp = client.delete("/analyses/nao-existe")
+        assert resp.status_code == 404
+
+    def test_isolamento_tenant_nao_deleta_outro(self, app_client):
+        """Tenant_id diferente no banco → data vazia → 404 (sem vazar dados)."""
+        client, mock_sb = app_client
+        (mock_sb.table.return_value.delete.return_value
+         .eq.return_value.eq.return_value
+         .execute.return_value) = MagicMock(data=[])
+
+        resp = client.delete("/analyses/analysis-de-outro-tenant")
+        assert resp.status_code == 404
+
+    def test_500_quando_supabase_falha(self, app_client):
+        client, mock_sb = app_client
+        mock_chain = (
+            mock_sb.table.return_value.delete.return_value
+            .eq.return_value.eq.return_value
+        )
+        mock_chain.execute.side_effect = Exception("DB offline")
+
+        resp = client.delete("/analyses/analysis-001")
+        assert resp.status_code == 500
+
+
+# ────────────────────────────────────────────────────────────
+# DELETE /analyses  (clear all)
+# ────────────────────────────────────────────────────────────
+
+class TestDeleteAllAnalyses:
+    def test_limpa_historico_com_sucesso(self, app_client):
+        client, mock_sb = app_client
+        (mock_sb.table.return_value.delete.return_value
+         .eq.return_value
+         .execute.return_value) = MagicMock(data=[MOCK_RECORD])
+
+        resp = client.delete("/analyses")
+        assert resp.status_code == 204
+
+    def test_isolamento_filtra_apenas_tenant_atual(self, app_client):
+        """Garante que .eq('tenant_id', tenant_id) é chamado com o valor correto."""
+        client, mock_sb = app_client
+        (mock_sb.table.return_value.delete.return_value
+         .eq.return_value
+         .execute.return_value) = MagicMock(data=[])
+
+        resp = client.delete("/analyses")
+        assert resp.status_code == 204
+        mock_sb.table.return_value.delete.return_value.eq.assert_called_with(
+            "tenant_id", "tenant-001"
+        )
+
+    def test_500_quando_supabase_falha(self, app_client):
+        client, mock_sb = app_client
+        mock_chain = mock_sb.table.return_value.delete.return_value.eq.return_value
+        mock_chain.execute.side_effect = Exception("DB offline")
+
+        resp = client.delete("/analyses")
+        assert resp.status_code == 500
