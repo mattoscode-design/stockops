@@ -100,7 +100,7 @@
     min-height: 100%;
   }
 
-  .font-serif { font-family: var(--font-serif); }
+  .font-serif { font-family: var(--font-serif); font-style: italic; }
   .font-mono  { font-family: var(--font-mono); }
 
   /* Grid background — ds-grid-bg (nome adaptado para não colidir) */
