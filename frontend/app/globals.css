@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+/* ══ DESIGN SYSTEM — portado do Lovable ══════════════════════════════════════
+   Fonte original: StockOps_lovable.md / src/styles.css
+   Adaptações: sem source(none), sem tw-animate-css, fontes via next/font
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@theme inline {
+  /* Radii */
+  --radius-sm:  calc(var(--radius) - 4px);
+  --radius-md:  calc(var(--radius) - 2px);
+  --radius-lg:  var(--radius);
+  --radius-xl:  calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+
+  /* Core palette → Tailwind utilities */
+  --color-background:        var(--background);
+  --color-foreground:        var(--foreground);
+  --color-card:              var(--card);
+  --color-card-foreground:   var(--card-foreground);
+  --color-popover:           var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary:           var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary:         var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:             var(--muted);
+  --color-muted-foreground:  var(--muted-foreground);
+  --color-accent:            var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive:       var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border:            var(--border);
+  --color-input:             var(--input);
+  --color-ring:              var(--ring);
+
+  /* Lovable tokens */
+  --color-ink:          var(--ink);
+  --color-bone:         var(--bone);
+  --color-amber-signal: var(--amber-signal);
+  --color-amber-soft:   var(--amber-soft);
+  --color-success:      var(--success);
+  --color-danger:       var(--danger);
+
+  /* Fontes — next/font injeta as variáveis CSS no <html>, fallback nomeado */
+  --font-sans:  var(--font-space-grotesk, "Space Grotesk"), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif, "Instrument Serif"), ui-serif, Georgia, serif;
+  --font-mono:  var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+}
+
+/* ── Variáveis — mesmos valores do Lovable :root ────────────────────────── */
+:root {
+  --radius: 0.625rem;
+
+  --background:        oklch(0.985 0.005 80);
+  --foreground:        oklch(0.14 0.01 60);
+  --ink:               oklch(0.11 0.012 60);
+  --bone:              oklch(0.96 0.012 80);
+  --amber-signal:      oklch(0.74 0.18 55);
+  --amber-soft:        oklch(0.92 0.06 70);
+  --success:           oklch(0.62 0.16 150);
+  --danger:            oklch(0.62 0.22 25);
+
+  --card:              oklch(1 0 0);
+  --card-foreground:   oklch(0.14 0.01 60);
+  --popover:           oklch(1 0 0);
+  --popover-foreground: oklch(0.14 0.01 60);
+  --primary:           oklch(0.11 0.012 60);
+  --primary-foreground: oklch(0.98 0.005 80);
+  --secondary:         oklch(0.93 0.01 70);
+  --secondary-foreground: oklch(0.14 0.01 60);
+  --muted:             oklch(0.94 0.008 75);
+  --muted-foreground:  oklch(0.45 0.015 60);
+  --accent:            oklch(0.74 0.18 55);
+  --accent-foreground: oklch(0.11 0.012 60);
+  --destructive:       oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border:            oklch(0.88 0.01 70);
+  --input:             oklch(0.9 0.01 70);
+  --ring:              oklch(0.74 0.18 55);
+}
+
+/* ── Base (equivale ao @layer base do Lovable) ──────────────────────────── */
+@layer base {
+  * {
+    border-color: var(--color-border);
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100%;
+  }
+
+  .font-serif { font-family: var(--font-serif); }
+  .font-mono  { font-family: var(--font-mono); }
+
+  /* Grid background — ds-grid-bg (nome adaptado para não colidir) */
+  .ds-grid-bg,
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--ink) 6%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--ink) 6%, transparent) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  /* Ticker */
+  .ds-ticker,
+  .ticker {
+    animation: ticker 40s linear infinite;
+  }
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  /* Pulse dot */
+  .ds-pulse-dot,
+  .pulse-dot {
+    animation: pulseDot 2s ease-in-out infinite;
+  }
+  @keyframes pulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: .5; transform: scale(1.4); }
+  }
+}
+
+/* ══ COMPONENTES DASHBOARD (mantidos para compatibilidade) ══════════════════ */
+@layer components {
+
+  /* Tipografia */
+  .heading-display {
+    font-size: clamp(2.8rem, 7vw, 5rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.02;
+  }
+  .heading-lg {
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+  }
+  .text-balance { text-wrap: balance; }
+
+  /* Botão ghost (dashboard) */
+  .btn-ghost {
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+    cursor: pointer;
+    background: none;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-ghost:hover { border-color: var(--amber-signal); color: var(--amber-signal); }
+  .btn-ghost-danger:hover { border-color: var(--danger) !important; color: var(--danger) !important; }
+
+  /* Card hover lift */
+  .card-lift { transition: transform .25s cubic-bezier(.16,1,.3,1), box-shadow .25s ease; }
+  .card-lift:hover { transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,.08); }
+
+  /* Dashboard score bar */
+  .score-bar { height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 2px; transition: width .7s cubic-bezier(.4,0,.2,1); }
+
+  /* Tab content fade */
+  .tab-content { animation: fadeUp .2s ease; }
+}
+
+/* ══ ANIMAÇÕES ═══════════════════════════════════════════════════════════════ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/* Gradient text âmbar */
+.text-gradient {
+  background: linear-gradient(90deg, oklch(0.85 0.18 80) 0%, oklch(0.74 0.18 55) 40%, oklch(0.85 0.18 80) 80%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ══ UTILITÁRIOS ═════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--muted); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 100px var(--card) inset;
+  -webkit-text-fill-color: var(--foreground);
+}
+
+.recharts-surface { overflow: visible; }
+.recharts-tooltip-wrapper { outline: none !important; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+}
+
+/* ══ DASHBOARD — variáveis legadas (tabs, estoque, ranking, etc.) ════════════
+   Mantidas para compatibilidade com components existentes que usam var(--bg),
+   var(--text), var(--amber), var(--surface), etc.
+   ════════════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  --bg:      var(--background);
+  --bg-2:    var(--bone);
+  --surface: oklch(0.94 0.008 75);
+  --surface-2: oklch(0.91 0.008 75);
+  --border-legacy: var(--border);
+  --amber:   var(--amber-signal);
+  --red:     var(--danger);
+  --orange:  oklch(0.65 0.19 40);
+  --green:   var(--success);
+  --cyan:    oklch(0.65 0.14 220);
+  --text:    var(--ink);
+  --text-2:  var(--muted-foreground);
+  --muted:   var(--muted-foreground);
+}
+
+[data-theme="dark"] {
+  --bg:        oklch(0.12 0.012 265);
+  --bg-2:      oklch(0.15 0.012 265);
+  --surface:   oklch(0.18 0.015 265);
+  --surface-2: oklch(0.21 0.015 265);
+  --border:    oklch(0.26 0.01 265);
+  --amber:     oklch(0.82 0.18 70);
+  --red:       oklch(0.65 0.21 25);
+  --orange:    oklch(0.70 0.19 40);
+  --green:     oklch(0.68 0.16 150);
+  --cyan:      oklch(0.72 0.14 220);
+  --text:      oklch(0.93 0.005 265);
+  --text-2:    oklch(0.68 0.01 265);
+  --muted:     oklch(0.45 0.01 265);
+
+  /* redefine lovable tokens para modo escuro */
+  --background:       oklch(0.12 0.012 265);
+  --foreground:       oklch(0.93 0.005 265);
+  --ink:              oklch(0.93 0.005 265);
+  --bone:             oklch(0.18 0.015 265);
+  --card:             oklch(0.18 0.015 265);
+  --card-foreground:  oklch(0.93 0.005 265);
+  --muted:            oklch(0.21 0.015 265);
+  --muted-foreground: oklch(0.55 0.01 265);
+  --border:           oklch(0.26 0.01 265);
+}

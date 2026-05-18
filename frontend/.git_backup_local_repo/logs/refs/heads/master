@@ -1,0 +1,6 @@
+0000000000000000000000000000000000000000 cce63290fc8cc81c8aba2b75d5e91b8c14ee1029 Gabriel Mattos <mattos.code@gmail.com> 1778176423 -0300	commit (initial): Initial commit from Create Next App
+cce63290fc8cc81c8aba2b75d5e91b8c14ee1029 f27c7ceaa2209494f61fe541bfc7742496f37830 Gabriel Mattos <mattos.code@gmail.com> 1778505143 -0300	commit: add
+f27c7ceaa2209494f61fe541bfc7742496f37830 8c7d37122e7f700c8689b97c2c1b04ef4339993c Gabriel Mattos <mattos.code@gmail.com> 1779081958 -0300	commit: feat(sprint3): migrate inventory to API-first + fix dashboard state
+8c7d37122e7f700c8689b97c2c1b04ef4339993c 4d797f302670e8753d90cd61ab89bea1eaa77259 Gabriel Mattos <mattos.code@gmail.com> 1779082726 -0300	commit: feat(sprint3): port Lovable design system + full landing page rebuild
+4d797f302670e8753d90cd61ab89bea1eaa77259 3ea2ae8dd3fd192adceae42ab04d7ac7a570fc6e Gabriel Mattos <mattos.code@gmail.com> 1779083348 -0300	commit: fix(css): rebuild globals.css for Tailwind v4 token chain
+3ea2ae8dd3fd192adceae42ab04d7ac7a570fc6e 32a9c839fb6286ca49c2d8394988dac56335d5e4 Gabriel Mattos <mattos.code@gmail.com> 1779084930 -0300	commit: recuparando visual
