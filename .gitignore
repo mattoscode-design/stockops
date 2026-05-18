@@ -38,3 +38,6 @@ Thumbs.db
 CLAUDE.md
 .claude/
 PO.md
+
+# Local migration backups
+frontend/.git_backup_local_repo/
