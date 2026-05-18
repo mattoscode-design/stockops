@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 interface Props {
   username: string;
   criticos?: number;
+  onLogoClick?: () => void;
 }
 
-export default function Navbar({ username, criticos = 0 }: Props) {
+export default function Navbar({ username, criticos = 0, onLogoClick }: Props) {
   const router = useRouter();
 
   function logout() {
@@ -24,7 +25,13 @@ export default function Navbar({ username, criticos = 0 }: Props) {
         {/* Logo + título */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => {
+              if (onLogoClick) {
+                onLogoClick();
+              } else {
+                router.push("/");
+              }
+            }}
             style={{
               fontFamily: "monospace",
               fontSize: 13,

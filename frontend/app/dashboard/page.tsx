@@ -110,7 +110,14 @@ function DashboardInner() {
       {/* ── HEADER FIXO COMPLETO (Navbar + Banner + Tabs juntos) ── */}
       <div className="no-print" style={{ position: "sticky", top: 0, zIndex: 50, background: "#fff", boxShadow: "0 1px 0 var(--border)" }}>
 
-        <Navbar username={username} criticos={isDemo ? 0 : criticos} />
+        <Navbar
+          username={username}
+          criticos={isDemo ? 0 : criticos}
+          onLogoClick={() => {
+            setResult(null);
+            setTab("painel");
+          }}
+        />
 
         {/* Banner demo */}
         {isDemo && (
