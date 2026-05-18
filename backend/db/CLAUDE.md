@@ -6,17 +6,23 @@ Você é o **Arquiteto de Dados (Terminal 5)** do StockOps. Seu domínio exclusi
 
 ---
 
-## Estado Atual (2026-05-14) — CONCLUÍDO
+## Estado Atual (2026-05-17) — CONCLUÍDO
 
 - ✅ Migration `001_multi_tenant.sql` executada no Supabase
+- ✅ Migration `002_fix_analyses_schema.sql` executada no Supabase — schema alinhado com código
 - ✅ 5 tabelas criadas: `tenants`, `users`, `analyses`, `inventory_items`, `inventory_movements`
 - ✅ RLS ativo em `analyses`, `inventory_items`, `inventory_movements`
 - ✅ Seed executado: tenant `StockOps Demo` + usuário `admin`
 - ✅ `db/database.py` atualizado para PostgreSQL com connection pool
 - ✅ `db/supabase_client.py` criado — client centralizado com service_role
 - ✅ `Base.metadata.create_all()` removido do `main.py`
-- ✅ `.env` com `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`
-- ✅ Conexão testada via `supabase-py` (HTTPS — sem problema de IPv6)
+- ✅ `.env` com `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY` (formato `sb_secret_*`)
+- ✅ Conexão testada e validada — INSERT/DELETE OK, 62/62 testes passando
+- ✅ Bug B2 fechado: `save_analysis()` capturava PGRST204 silenciosamente — resolvido pela 002
+
+**Causa raiz do banco vazio (B2):** O código Sprint 2 já usava os nomes corretos
+(`perda_total_estimada`, `resultados`, `relatorio`, `user_id` nullable). O banco estava
+desatualizado — a 001 tinha nomes antigos. A 002 alinhou o banco ao código.
 
 **Supabase project ref:** `xyzdrvojjjrbbuyxknfv`
 
@@ -36,6 +42,17 @@ O `supabase-py` usa HTTPS (porta 443, IPv4) — funciona em qualquer ambiente.
 - Nunca expor `SUPABASE_SERVICE_KEY` ao frontend
 - `SUPABASE_ANON_KEY` reservado para uso futuro no frontend direto
 
+### NOTA ARQUITETURAL — service_role bypassa RLS (2026-05-17)
+
+O backend usa `SUPABASE_SERVICE_KEY` (service_role), que **bypassa a RLS completamente**.
+O isolamento por tenant é garantido pelos filtros `.eq("tenant_id", tenant_id)` nos routers
+da aplicação (`_require_tenant()` em cada endpoint protegido).
+
+A RLS atua como **segunda camada de defesa** apenas para acessos diretos ao banco
+(ex: Supabase Studio, psql, scripts externos). Para o backend em si, é transparente.
+
+**Backlog:** Avaliar migrar para `anon key` + RLS ativa como camada primária de isolamento.
+
 ---
 
 ## Arquitetura de Banco (Implementada)
@@ -53,7 +70,7 @@ tenants (1)
 ```sql
 tenants            → id, name, slug, plan, created_at, active
 users              → id, tenant_id, username, password_hash, role, email, created_at, active
-analyses           → id, tenant_id, user_id, filename, total_skus, skus_criticos, perda_total, result_json, created_at
+analyses           → id, tenant_id, user_id (nullable), filename, total_skus, skus_criticos, perda_total_estimada, resultados (JSONB), relatorio (TEXT), created_at
 inventory_items    → id, tenant_id, sku, loja, categoria, estoque_atual, vendas_diarias, preco_medio, updated_at
 inventory_movements→ id, tenant_id, item_id, tipo (entrada|saida), quantidade, motivo, created_at
 ```
@@ -116,9 +133,14 @@ Usuário: admin | role=admin | senha=admin123
 ## Próximas Migrations Previstas
 
 ```
-002_analyses_persistence.sql   ← quando T4 migrar histórico do localStorage
-003_inventory_persistence.sql  ← quando T4 migrar inventário do localStorage
+003_delete_analyses.sql   ← se PO decidir pelo DELETE /analyses (botão "Limpar")
+                             T4 implementa o endpoint; T5 avalia impacto no schema
+                             Status: aguardando decisão PO (Q aberta)
 ```
+
+> As migrations `002_analyses_persistence.sql` e `003_inventory_persistence.sql` previstas
+> anteriormente foram descartadas — a persistência foi implementada diretamente via
+> endpoints REST na Sprint 2 (sem necessidade de alteração de schema).
 
 ---
 
