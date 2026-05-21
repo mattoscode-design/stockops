@@ -3,26 +3,31 @@
 import { useState, useMemo, useDeferredValue, useCallback } from "react";
 import type { AnalysisRow } from "@/types/analysis";
 
-const RISK_COLORS: Record<string, string> = {
-  Urgente:            "#E05252",
-  "Ação Recomendada": "#E88A00",
-  Alerta:             "#E8C200",
-  Monitoramento:      "#3DB87A",
+const STATUS_PILL: Record<string, string> = {
+  "Urgente":           "bg-danger/15 text-danger border-danger/30",
+  "Ação Recomendada":  "bg-amber-signal/20 text-amber-signal border-amber-signal/40",
+  "Alerta":            "bg-amber-soft text-ink border-amber-signal/30",
+  "Monitoramento":     "bg-success/15 text-success border-success/30",
 };
-const ABC_COLORS: Record<string, string> = { A: "#E05252", B: "#E88A00", C: "#3DB87A" };
+
+const CURVA_PILL: Record<string, string> = {
+  A: "bg-danger/15 text-danger border-danger/40",
+  B: "bg-amber-signal/15 text-amber-signal border-amber-signal/40",
+  C: "bg-success/15 text-success border-success/40",
+};
 
 function scoreColor(score: number) {
-  if (score >= 86) return "#E05252";
-  if (score >= 71) return "#E88A00";
-  if (score >= 51) return "#E8C200";
-  return "#3DB87A";
+  if (score >= 86) return "var(--danger)";
+  if (score >= 71) return "var(--amber-signal)";
+  if (score >= 51) return "oklch(0.78 0.14 85)";
+  return "var(--success)";
 }
 
 function exportToCSV(rows: AnalysisRow[]) {
-  const headers = ["SKU","Loja","Categoria","ABC","Cobertura (d)","Score","Status","Perda (R$)","Reposição","Insight","Recomendação"];
+  const headers = ["Código","Produto","Loja","Categoria","ABC","Cobertura (d)","Score","Status","Perda (R$)","Reposição","Insight","Recomendação"];
   const esc = (v: string|number) => typeof v === "string" ? `"${v.replace(/"/g,'""')}"` : v;
   const lines = [headers.join(","), ...rows.map(r => [
-    esc(r.sku),esc(r.loja),esc(r.categoria),esc(r.curva_abc||"C"),
+    esc(r.sku),esc(r.nome || r.sku),esc(r.loja),esc(r.categoria),esc(r.curva_abc||"C"),
     r.cobertura_dias,r.score_ruptura,esc(r.classificacao),
     r.perda_estimada_reais,r.quantidade_recomendada,
     esc(r.insight),esc(r.recomendacao),
@@ -137,7 +142,7 @@ export default function RiskTable({ rows, categorias }: Props) {
           <table style={{ width:"100%", borderCollapse:"collapse", minWidth: 800 }}>
             <thead>
               <tr style={{ background:"#F7F7FA", borderBottom:"1px solid #E2E2EA" }}>
-                {["SKU","Loja","Categoria","ABC","Cobertura","Score","Status","Perda Est."].map(h => (
+                {["Código","Produto","Loja","Categoria","ABC","Cobertura","Score","Status","Perda Est."].map(h => (
                   <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:10, fontWeight:700,
                     letterSpacing:"0.1em", textTransform:"uppercase", color:"#9090A8", whiteSpace:"nowrap" }}>
                     {h}
@@ -148,7 +153,7 @@ export default function RiskTable({ rows, categorias }: Props) {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding:"48px", textAlign:"center", color:"#9090A8", background:"#FAFAFA", fontSize:14 }}>
+                  <td colSpan={9} style={{ padding:"48px", textAlign:"center", color:"#9090A8", background:"#FAFAFA", fontSize:14 }}>
                     Nenhum SKU corresponde aos filtros.
                   </td>
                 </tr>
@@ -156,32 +161,47 @@ export default function RiskTable({ rows, categorias }: Props) {
                 const key = `${row.sku}::${row.loja}::${i}`;
                 const isOpen = expanded === key;
                 const sc = scoreColor(row.score_ruptura);
-                const tc = RISK_COLORS[row.classificacao] ?? "var(--muted)";
                 const abc = getAbc(row);
-                const abcC = ABC_COLORS[abc] ?? "#888";
 
                 return (
                   <tr key={key}>
-                    <td colSpan={8} style={{ padding: 0 }}>
+                    <td colSpan={9} style={{ padding: 0 }}>
                       <table style={{ width:"100%", borderCollapse:"collapse" }}>
                         <tbody>
                           <tr onClick={() => toggle(key)}
                             style={{ background: isOpen ? "#F0F0F8" : "#FFFFFF", borderBottom: isOpen ? "none" : "1px solid var(--border)", cursor:"pointer", transition:"background 0.15s", display:"table-row" }}
                             onMouseEnter={e => { if (!isOpen) (e.currentTarget as HTMLElement).style.background = "#F5F5FA"; }}
                             onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLElement).style.background = "#FFFFFF"; }}>
-                            <td style={{ padding:"12px 14px", fontFamily:"monospace", fontSize:13, fontWeight:500, color:"var(--text)", width:"25%", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:180 }}>{row.sku}</td>
-                            <td style={{ padding:"12px 14px", fontSize:12, color:"var(--muted)", width:"19%", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{row.loja}</td>
+                            <td style={{ padding:"12px 14px", fontFamily:"monospace", fontSize:12, fontWeight:600, color:"var(--text)", width:"14%", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:120 }}>{row.sku}</td>
+                            <td style={{ padding:"12px 14px", fontSize:13, color:"var(--text)", width:"18%", overflow:"hidden", textOverflow:"ellipsis", maxWidth:160 }}>{row.nome || row.sku}</td>
+                            <td style={{ padding:"12px 14px", fontSize:12, color:"var(--muted)", width:"14%", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{row.loja}</td>
                             <td style={{ padding:"12px 14px", fontSize:12, color:"var(--muted)", width:"15%", whiteSpace:"nowrap" }}>{row.categoria || "—"}</td>
                             <td style={{ padding:"12px 14px", width:"10%" }}>
-                              <span style={{ fontFamily:"monospace", fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:4, color:abcC, background:`${abcC}18`, border:`1px solid ${abcC}40` }}>{abc}</span>
+                              <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md border font-mono text-[11px] font-semibold ${CURVA_PILL[abc] ?? ""}`}>
+                                {abc}
+                              </span>
                             </td>
-                            <td style={{ padding:"12px 14px", fontFamily:"monospace", fontSize:13, width:"11%", color: row.cobertura_dias < 3 ? "#E05252" : "var(--text)" }}>{row.cobertura_dias}d</td>
+                            <td style={{ padding:"12px 14px", fontFamily:"monospace", fontSize:13, width:"11%", color: row.cobertura_dias < 3 ? "var(--danger)" : "var(--text)" }}>{row.cobertura_dias}d</td>
                             <td style={{ padding:"12px 14px", minWidth:90, width:"11%" }}>
                               <div style={{ fontFamily:"monospace", fontSize:13, fontWeight:700, color:sc, marginBottom:4 }}>{row.score_ruptura}</div>
                               <div className="score-bar"><div className="score-bar-fill" style={{ width:`${row.score_ruptura}%`, background:sc }} /></div>
                             </td>
                             <td style={{ padding:"12px 14px", whiteSpace:"nowrap", width:"17%" }}>
-                              <span style={{ fontSize:11, fontWeight:500, padding:"3px 8px", borderRadius:4, color:tc, background:`${tc}18`, border:`1px solid ${tc}40` }}>{row.classificacao}</span>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.15em] ${STATUS_PILL[row.classificacao] ?? ""}`}>
+                                  <span className="h-1.5 w-1.5 rounded-full bg-current" />{row.classificacao}
+                                </span>
+                                {row.validade_dias_restantes != null && row.validade_dias_restantes <= 0 && (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-danger/30 bg-danger/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.15em] text-danger">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />Vencido
+                                  </span>
+                                )}
+                                {row.validade_dias_restantes != null && row.validade_dias_restantes > 0 && row.validade_dias_restantes < row.cobertura_dias && (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-danger/30 bg-danger/15 px-2 py-0.5 font-mono text-[10px] tracking-[0.12em] text-danger">
+                                    Vence em {row.validade_dias_restantes}d
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td style={{ padding:"12px 14px", textAlign:"right", fontFamily:"monospace", fontSize:12, color:"var(--text)", whiteSpace:"nowrap", width:"12%" }}>
                               R$ {row.perda_estimada_reais.toLocaleString("pt-BR",{minimumFractionDigits:2})}
@@ -190,7 +210,7 @@ export default function RiskTable({ rows, categorias }: Props) {
 
                           {isOpen && (
                             <tr>
-                              <td colSpan={8} style={{ background:"#F5F5FA", borderBottom:"1px solid #E2E2EA", padding:"16px 14px" }}>
+                              <td colSpan={9} style={{ background:"#F5F5FA", borderBottom:"1px solid #E2E2EA", padding:"16px 14px" }}>
                                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 }}>
                                   <div>
                                     <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.1em", color:"#9090A8", marginBottom:4 }}>Insight</div>
@@ -207,7 +227,7 @@ export default function RiskTable({ rows, categorias }: Props) {
                                     </div>
                                     <div>
                                       <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.1em", color:"#9090A8", marginBottom:4 }}>Curva ABC</div>
-                                      <div style={{ fontFamily:"monospace", fontSize:14, fontWeight:700, color:abcC }}>{abc} {abc === "A" ? "— Alto impacto" : abc === "B" ? "— Médio impacto" : "— Baixo impacto"}</div>
+                                      <div style={{ fontFamily:"monospace", fontSize:14, fontWeight:700, color: abc === "A" ? "var(--danger)" : abc === "B" ? "var(--amber-signal)" : "var(--success)" }}>{abc} {abc === "A" ? "— Alto impacto" : abc === "B" ? "— Médio impacto" : "— Baixo impacto"}</div>
                                     </div>
                                   </div>
                                 </div>

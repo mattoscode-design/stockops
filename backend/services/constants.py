@@ -101,7 +101,9 @@ REQUIRED_COLUMNS = {
 }
 
 OPTIONAL_COLUMNS = {
+    "nome",
     "categoria",
+    "data_validade",
     "regularidade_abastecimento",
     "indice_sazonalidade",
     "aceleracao",

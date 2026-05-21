@@ -25,6 +25,7 @@ MOCK_SUMMARY_PAYLOAD = {
     "total_skus": 5,
     "skus_criticos": 2,
     "perda_total_estimada": 1500.00,
+    "receita_potencial_total": 8000.00,
     "categorias": ["Bebidas"],
     "relatorio": "Relatório de teste",
     "resultados": [],

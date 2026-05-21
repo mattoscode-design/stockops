@@ -260,15 +260,16 @@ function Hero() {
                 <code className="rounded bg-muted px-2 py-1 text-ink">admin123</code>
               </div>
             </div>
+
+            <div className="absolute -right-4 -bottom-4 hidden rotate-3 rounded-lg border border-border bg-card px-3 py-2 shadow-lg lg:flex lg:items-center lg:gap-2">
+              <TrendingDown className="h-3.5 w-3.5 text-danger" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink">Ruptura · 3d</span>
+            </div>
           </div>
 
           <div className="absolute -left-6 top-4 hidden rotate-[-4deg] rounded-lg border border-border bg-card px-3 py-2 shadow-lg lg:flex lg:items-center lg:gap-2">
             <Activity className="h-3.5 w-3.5 text-accent" />
             <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink">Score 92</span>
-          </div>
-          <div className="absolute -right-4 bottom-12 hidden rotate-3 rounded-lg border border-border bg-card px-3 py-2 shadow-lg lg:flex lg:items-center lg:gap-2">
-            <TrendingDown className="h-3.5 w-3.5 text-danger" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink">Ruptura · 3d</span>
           </div>
         </div>
       </div>

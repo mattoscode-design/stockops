@@ -1,8 +1,11 @@
+from __future__ import annotations
+from typing import Optional
 from pydantic import BaseModel, field_validator
 
 
 class AnalysisResponse(BaseModel):
     sku: str
+    nome: str
     loja: str
     categoria: str
     cobertura_dias: float
@@ -11,6 +14,8 @@ class AnalysisResponse(BaseModel):
     curva_abc: str
     perda_estimada_reais: float
     quantidade_recomendada: float
+    receita_potencial: float
+    validade_dias_restantes: Optional[int] = None
     insight: str
     recomendacao: str
 
@@ -19,6 +24,7 @@ class AnalysisSummary(BaseModel):
     total_skus: int
     skus_criticos: int
     perda_total_estimada: float
+    receita_potencial_total: float
     categorias: list[str]
     relatorio: str
     resultados: list[AnalysisResponse]

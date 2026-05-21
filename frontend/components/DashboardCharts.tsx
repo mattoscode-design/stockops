@@ -1,23 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Label,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
 } from "recharts";
 import type { AnalysisResult, AnalysisRow } from "@/types/analysis";
 
 const RISK_COLORS: Record<string, string> = {
-  Urgente:            "#E05252",
-  "Ação Recomendada": "#E88A00",
-  Alerta:             "#E8C200",
-  Monitoramento:      "#3DB87A",
+  Urgente:            "var(--danger)",
+  "Ação Recomendada": "var(--amber-signal)",
+  Alerta:             "oklch(0.78 0.14 85)",
+  Monitoramento:      "var(--success)",
 };
 
 const ABC_COLORS: Record<string, string> = {
-  A: "#E05252",
-  B: "#E88A00",
-  C: "#3DB87A",
+  A: "var(--danger)",
+  B: "var(--amber-signal)",
+  C: "var(--success)",
 };
 
 interface TProps {
@@ -104,35 +104,53 @@ function calcularAbcFrontend(rows: { sku: string; loja: string; perda_estimada_r
   return map;
 }
 
-export default function DashboardCharts({ result }: { result: AnalysisResult }) {
+const SEL: React.CSSProperties = {
+  background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)",
+  borderRadius: 6, padding: "5px 10px", fontSize: 12, outline: "none", cursor: "pointer",
+};
+
+export default function DashboardCharts({ result, receitaPotencial }: { result: AnalysisResult; receitaPotencial?: number }) {
+  const [filterCat,  setFilterCat]  = useState("all");
+  const [filterLoja, setFilterLoja] = useState("all");
+
+  const cats  = useMemo(() => Array.from(new Set(result.resultados.map(r => r.categoria).filter(Boolean))).sort(), [result]);
+  const lojas = useMemo(() => Array.from(new Set(result.resultados.map(r => r.loja).filter(Boolean))).sort(), [result]);
+
+  const rows = useMemo(() =>
+    result.resultados.filter(r =>
+      (filterCat  === "all" || r.categoria === filterCat) &&
+      (filterLoja === "all" || r.loja      === filterLoja)
+    ),
+  [result, filterCat, filterLoja]);
+
   // Verifica se curva_abc está faltando/errada e recalcula
-  const allC = result.resultados.every(r => !r.curva_abc || r.curva_abc === "C");
-  const abcMap = allC ? calcularAbcFrontend(result.resultados) : null;
+  const allC = rows.every(r => !r.curva_abc || r.curva_abc === "C");
+  const abcMap = allC ? calcularAbcFrontend(rows) : null;
   const getAbc = (r: { sku: string; loja: string; curva_abc: string }) =>
     abcMap ? (abcMap.get(`${r.sku}::${r.loja}`) ?? "C") : (r.curva_abc || "C");
 
   // 1 — Distribuição de risco com label de porcentagem
-  const riskCounts = result.resultados.reduce<Record<string, number>>((acc, r) => {
+  const riskCounts = rows.reduce<Record<string, number>>((acc, r) => {
     acc[r.classificacao] = (acc[r.classificacao] ?? 0) + 1;
     return acc;
   }, {});
-  const total = result.resultados.length;
+  const total = rows.length;
   const riskData = ["Urgente", "Ação Recomendada", "Alerta", "Monitoramento"]
     .filter(k => riskCounts[k])
-    .map(k => ({ name: k, value: riskCounts[k], pct: Math.round((riskCounts[k] / total) * 100) }));
+    .map(k => ({ name: k, value: riskCounts[k], pct: Math.round((riskCounts[k] / (total || 1)) * 100) }));
 
   // 2 — Cobertura por faixa (mais clara)
   const FAIXAS = [
-    { name: "Ruptura",  desc: "0 dias — sem estoque",      min: -1, max: 0,        color: "#E05252" },
-    { name: "Crítico",  desc: "1 a 3 dias de estoque",     min: 0,  max: 3,        color: "#E88A00" },
-    { name: "Risco",    desc: "3 a 7 dias de estoque",     min: 3,  max: 7,        color: "#E8C200" },
+    { name: "Ruptura",  desc: "0 dias — sem estoque",      min: -1, max: 0,        color: "var(--danger)" },
+    { name: "Crítico",  desc: "1 a 3 dias de estoque",     min: 0,  max: 3,        color: "var(--amber-signal)" },
+    { name: "Risco",    desc: "3 a 7 dias de estoque",     min: 3,  max: 7,        color: "oklch(0.78 0.14 85)" },
     { name: "Atenção",  desc: "7 a 14 dias de estoque",    min: 7,  max: 14,       color: "#94A3B8" },
-    { name: "Estável",  desc: "Acima de 14 dias",          min: 14, max: Infinity, color: "#3DB87A" },
+    { name: "Estável",  desc: "Acima de 14 dias",          min: 14, max: Infinity, color: "var(--success)" },
   ];
   const coberturaData = FAIXAS.map(f => ({
     name: f.name,
     fullName: `${f.name} — ${f.desc}`,
-    value: result.resultados.filter(r =>
+    value: rows.filter(r =>
       f.max === 0 ? r.cobertura_dias === 0
       : f.min === -1 ? r.cobertura_dias === 0
       : f.max === Infinity ? r.cobertura_dias > f.min
@@ -142,7 +160,7 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
   })).filter(d => d.value > 0);
 
   // 3 — Top 10 SKUs por perda
-  const topSkus = [...result.resultados]
+  const topSkus = [...rows]
     .sort((a, b) => b.perda_estimada_reais - a.perda_estimada_reais)
     .slice(0, 10)
     .map(r => ({
@@ -153,7 +171,7 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
     }));
 
   // 4 — ABC (com recálculo frontend se necessário)
-  const abcCounts = result.resultados.reduce<Record<string, number>>((acc, r) => {
+  const abcCounts = rows.reduce<Record<string, number>>((acc, r) => {
     const abc = getAbc(r);
     acc[abc] = (acc[abc] ?? 0) + 1;
     return acc;
@@ -165,7 +183,7 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
     }));
 
   // 5 — Perda por categoria
-  const catLoss = result.resultados.reduce<Record<string, number>>((acc, r) => {
+  const catLoss = rows.reduce<Record<string, number>>((acc, r) => {
     const cat = r.categoria || "Sem Categoria";
     acc[cat] = (acc[cat] ?? 0) + r.perda_estimada_reais;
     return acc;
@@ -178,8 +196,44 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
   const hasCategories = catData.length > 1;
   const barHeight = Math.max(200, topSkus.length * 36);
 
+  // Receita potencial por categoria (proporcional à perda estimada)
+  const totalPerdaGlobal = catData.reduce((a, c) => a + c.perda, 0) || 1;
+  const receitaCatData = receitaPotencial != null && hasCategories
+    ? catData.map(c => ({ name: c.name, receita: Math.round((c.perda / totalPerdaGlobal) * receitaPotencial) }))
+    : null;
+
+  if (total === 0) {
+    return (
+      <div style={{ padding: "32px 0", textAlign: "center", color: "var(--muted-foreground)", fontSize: 13 }}>
+        Nenhum SKU para os filtros selecionados.
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 24 }}>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)" }}>Filtrar:</span>
+        <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={SEL}>
+          <option value="all">Todas as categorias</option>
+          {cats.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filterLoja} onChange={e => setFilterLoja(e.target.value)} style={SEL}>
+          <option value="all">Todas as lojas</option>
+          {lojas.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+        {(filterCat !== "all" || filterLoja !== "all") && (
+          <button onClick={() => { setFilterCat("all"); setFilterLoja("all"); }}
+            style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+            Limpar filtros
+          </button>
+        )}
+        <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: "auto" }}>
+          {total} SKU{total !== 1 ? "s" : ""} {total < result.resultados.length ? `de ${result.resultados.length}` : ""}
+        </span>
+      </div>
 
       {/* Linha 1 — Risco + Cobertura */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -192,6 +246,14 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
                   <Pie data={riskData} cx="50%" cy="50%" innerRadius={44} outerRadius={72}
                     paddingAngle={3} dataKey="value">
                     {riskData.map((e, i) => <Cell key={i} fill={RISK_COLORS[e.name] ?? "#666"} />)}
+                    <Label content={({ viewBox }) => {
+                      const v = viewBox as { cx?: number; cy?: number };
+                      if (!v.cx || !v.cy) return null;
+                      return (<>
+                        <text x={v.cx} y={v.cy - 6} textAnchor="middle" dominantBaseline="middle" style={{ fontFamily: "monospace", fontSize: 17, fontWeight: 700, fill: "var(--ink)" }}>{total}</text>
+                        <text x={v.cx} y={v.cy + 10} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 9, fill: "var(--muted-foreground)" }}>SKUs</text>
+                      </>);
+                    }} />
                   </Pie>
                   <Tooltip content={<DarkTooltip />} />
                 </PieChart>
@@ -210,8 +272,8 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
               ))}
               <div style={{ marginTop: 8, padding: "8px 10px", background: "#F9F9FC", borderRadius: 8, border: "1px solid #E8E8EF" }}>
                 <p style={{ fontSize: 10, color: "#9090A8", lineHeight: 1.5 }}>
-                  <span style={{ color: "#E05252", fontWeight: 600 }}>Urgente + Ação</span> = atenção imediata<br />
-                  <span style={{ color: "#3DB87A", fontWeight: 600 }}>Monitoramento</span> = estável
+                  <span style={{ color: "var(--danger)", fontWeight: 600 }}>Urgente + Ação</span> = atenção imediata<br />
+                  <span style={{ color: "var(--success)", fontWeight: 600 }}>Monitoramento</span> = estável
                 </p>
               </div>
             </div>
@@ -236,7 +298,7 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
       {/* Linha 2 — Top SKUs (altura dinâmica) */}
       <Card title={`Top ${topSkus.length} SKUs por Perda Estimada`} infoKey="topskus">
         <ResponsiveContainer width="100%" height={barHeight}>
-          <BarChart data={topSkus} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+          <BarChart data={topSkus} layout="vertical" margin={{ top: 0, right: 90, left: 8, bottom: 0 }}>
             <CartesianGrid horizontal={false} stroke={GRID_COLOR} />
             <XAxis type="number" tick={{ fill: TICK_COLOR, fontSize: 10 }}
               tickFormatter={v => v >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : `R$${v}`}
@@ -246,6 +308,9 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
             <Tooltip content={<CurrencyTooltip />} />
             <Bar dataKey="perda" radius={[0, 4, 4, 0]} barSize={18}>
               {topSkus.map((e, i) => <Cell key={i} fill={e.color} />)}
+              <LabelList dataKey="perda" position="right"
+                formatter={(v: unknown) => { const n = Number(v); return n >= 1000 ? `R$${(n/1000).toFixed(1)}k` : `R$${n.toFixed(0)}`; }}
+                style={{ fill: "var(--muted-foreground)", fontSize: 10, fontFamily: "monospace" }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -262,6 +327,14 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
                   <Pie data={abcData} cx="50%" cy="50%" innerRadius={36} outerRadius={62}
                     paddingAngle={3} dataKey="value">
                     {abcData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                    <Label content={({ viewBox }) => {
+                      const v = viewBox as { cx?: number; cy?: number };
+                      if (!v.cx || !v.cy) return null;
+                      return (<>
+                        <text x={v.cx} y={v.cy - 5} textAnchor="middle" dominantBaseline="middle" style={{ fontFamily: "monospace", fontSize: 15, fontWeight: 700, fill: "var(--ink)" }}>{total}</text>
+                        <text x={v.cx} y={v.cy + 9} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 9, fill: "var(--muted-foreground)" }}>SKUs</text>
+                      </>);
+                    }} />
                   </Pie>
                   <Tooltip content={<DarkTooltip />} />
                 </PieChart>
@@ -292,7 +365,7 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
         {hasCategories && (
           <Card title="Perda Estimada por Categoria">
             <ResponsiveContainer width="100%" height={catData.length * 36 + 20}>
-              <BarChart data={catData} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+              <BarChart data={catData} layout="vertical" margin={{ top: 0, right: 90, left: 8, bottom: 0 }}>
                 <CartesianGrid horizontal={false} stroke={GRID_COLOR} />
                 <XAxis type="number" tick={{ fill: TICK_COLOR, fontSize: 10 }}
                   tickFormatter={v => v >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : `R$${v}`}
@@ -300,12 +373,38 @@ export default function DashboardCharts({ result }: { result: AnalysisResult }) 
                 <YAxis type="category" dataKey="name" width={130}
                   tick={{ fill: "#4A4A6A", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CurrencyTooltip />} />
-                <Bar dataKey="perda" fill="#F5A623" radius={[0, 4, 4, 0]} barSize={18} />
+                <Bar dataKey="perda" fill="var(--amber-signal)" radius={[0, 4, 4, 0]} barSize={18}>
+                  <LabelList dataKey="perda" position="right"
+                    formatter={(v: unknown) => { const n = Number(v); return n >= 1000 ? `R$${(n/1000).toFixed(1)}k` : `R$${n.toFixed(0)}`; }}
+                    style={{ fill: "var(--muted-foreground)", fontSize: 10, fontFamily: "monospace" }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </Card>
         )}
       </div>
+
+      {/* Receita Potencial por Categoria (F1) */}
+      {receitaCatData && (
+        <Card title="Receita Potencial por Categoria">
+          <ResponsiveContainer width="100%" height={receitaCatData.length * 36 + 20}>
+            <BarChart data={receitaCatData} layout="vertical" margin={{ top: 0, right: 90, left: 8, bottom: 0 }}>
+              <CartesianGrid horizontal={false} stroke={GRID_COLOR} />
+              <XAxis type="number" tick={{ fill: TICK_COLOR, fontSize: 10 }}
+                tickFormatter={v => v >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : `R$${v}`}
+                axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={130}
+                tick={{ fill: "#4A4A6A", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CurrencyTooltip />} />
+              <Bar dataKey="receita" fill="var(--success)" radius={[0, 4, 4, 0]} barSize={18}>
+                <LabelList dataKey="receita" position="right"
+                  formatter={(v: unknown) => { const n = Number(v); return n >= 1000 ? `R$${(n/1000).toFixed(1)}k` : `R$${n.toFixed(0)}`; }}
+                  style={{ fill: "var(--muted-foreground)", fontSize: 10, fontFamily: "monospace" }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
     </div>
   );
 }

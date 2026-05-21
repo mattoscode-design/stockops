@@ -37,6 +37,11 @@ export function loadHistory(): HistoryEntry[] {
   }
 }
 
+export function removeFromHistory(id: string): void {
+  const entries = loadHistory().filter(e => e.id !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
 export function clearHistory(): void {
   localStorage.removeItem(STORAGE_KEY);
 }

@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/v1", tags=["ERP Integration"])
 
 class SkuPayload(BaseModel):
     sku: str
+    nome: Optional[str] = None
     loja: str
     categoria: Optional[str] = "Sem Categoria"
     estoque_atual: float

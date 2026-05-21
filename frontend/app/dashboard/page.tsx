@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LayoutDashboard, ListOrdered, FileText, Package, ArrowUpFromLine, Plus } from "lucide-react";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import UploadZone from "@/components/UploadZone";
@@ -19,7 +20,7 @@ import InventoryManager, { useImportToInventory } from "@/components/InventoryMa
 import { importFromAnalysis, loadInventory } from "@/lib/inventory";
 import { ToastContainer } from "@/components/Toast";
 import type { AnalysisResult, HistoryEntry } from "@/types/analysis";
-import { saveToHistory, loadHistory, clearHistory } from "@/lib/history";
+import { saveToHistory, loadHistory, clearHistory, removeFromHistory } from "@/lib/history";
 import { apiFetch } from "@/lib/api";
 
 /* Lazy load pesado do recharts */
@@ -30,13 +31,35 @@ const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), {
 
 type Tab = "painel" | "ranking" | "relatorio" | "estoque" | "importar" | "manual";
 
-const TAB_LABELS: Record<Tab, { label: string; icon: string }> = {
-  painel:   { label: "Painel",       icon: "⬡" },
-  ranking:  { label: "Ranking",      icon: "↑" },
-  relatorio:{ label: "Relatório IA", icon: "✦" },
-  estoque:  { label: "Estoque",      icon: "📦" },
-  importar: { label: "Importar",     icon: "↑" },
-  manual:   { label: "Cadastrar",    icon: "+" },
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <span className="h-px w-8 bg-accent" />
+      <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-accent">{children}</span>
+    </div>
+  );
+}
+function PageHeader({ eyebrow, title, subtitle, right }: { eyebrow: string; title: string; subtitle?: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="mb-8 flex flex-wrap items-end justify-between gap-6">
+      <div>
+        <Eyebrow>{eyebrow}</Eyebrow>
+        <h1 className="text-[clamp(1.8rem,3vw,2.5rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-ink">{title}</h1>
+        {subtitle && <p className="mt-2 text-[14px] text-muted-foreground">{subtitle}</p>}
+      </div>
+      {right && <div className="flex flex-wrap items-center gap-2">{right}</div>}
+    </div>
+  );
+}
+
+type TabIcon = React.ComponentType<{ className?: string }>;
+const TAB_CONFIG: Record<Tab, { label: string; Icon: TabIcon }> = {
+  painel:    { label: "Painel",       Icon: LayoutDashboard },
+  ranking:   { label: "Ranking",      Icon: ListOrdered },
+  relatorio: { label: "Relatório IA", Icon: FileText },
+  estoque:   { label: "Estoque",      Icon: Package },
+  importar:  { label: "Importar",     Icon: ArrowUpFromLine },
+  manual:    { label: "Cadastrar",    Icon: Plus },
 };
 
 function DashboardInner() {
@@ -44,6 +67,7 @@ function DashboardInner() {
   const params  = useSearchParams();
 
   const [result,   setResult]   = useState<AnalysisResult | null>(null);
+  const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [isDemo,   setIsDemo]   = useState(false);
   const [invCriticos, setInvCriticos] = useState(0);
   const [loading,  setLoading]  = useState(false);
@@ -81,6 +105,7 @@ function DashboardInner() {
 
   function handleResult(data: AnalysisResult) {
     setResult(data);
+    setCurrentEntryId(null);
     setIsDemo(false);
     const entry = saveToHistory(data);
     setHistory(prev => [entry, ...prev].slice(0, 10));
@@ -136,25 +161,30 @@ function DashboardInner() {
         {/* Tab bar */}
         <div style={{ borderTop: "1px solid var(--border)" }}>
         <div style={{ maxWidth: "100%", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", gap: 2 }}>
+          <div className="flex">
             {tabs.map(t => {
               const isActive = tab === t;
+              const { label, Icon } = TAB_CONFIG[t];
               return (
                 <button key={t} onClick={() => setTab(t)}
-                  style={{
-                    background: "none", border: "none", padding: "14px 16px", fontSize: 13, fontWeight: isActive ? 600 : 400,
-                    color: isActive ? "var(--text)" : "var(--muted)", cursor: "pointer", fontFamily: "inherit",
-                    position: "relative", transition: "color .15s", display: "flex", alignItems: "center", gap: 6,
-                  }}>
-                  <span style={{ fontSize: 11, opacity: 0.6 }}>{TAB_LABELS[t].icon}</span>
-                  {TAB_LABELS[t].label}
+                  className={`group relative flex items-center gap-2 px-4 py-3.5 text-[12px] font-medium transition-colors ${
+                    isActive ? "text-ink" : "text-muted-foreground hover:text-ink"
+                  }`}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
                   {t === "ranking" && criticos > 0 && !isDemo && (
-                    <span style={{ fontSize: 10, fontFamily: "monospace", padding: "1px 5px", borderRadius: 4, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA" }}>{criticos}</span>
+                    <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-amber-soft px-1.5 font-mono text-[10px] font-semibold text-ink">
+                      {criticos}
+                    </span>
                   )}
                   {t === "estoque" && invCriticos > 0 && (
-                    <span style={{ fontSize: 10, fontFamily: "monospace", padding: "1px 5px", borderRadius: 4, background: "#FEF3C7", color: "#D97706", border: "1px solid #FDE68A" }}>{invCriticos}</span>
+                    <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-amber-soft px-1.5 font-mono text-[10px] font-semibold text-ink">
+                      {invCriticos}
+                    </span>
                   )}
-                  {isActive && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "var(--amber)", borderRadius: 1 }} />}
+                  {isActive && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-accent" />}
                 </button>
               );
             })}
@@ -168,14 +198,21 @@ function DashboardInner() {
             )}
             <HistoryPanel
               entries={history}
-              onSelect={d => { setResult(d); setIsDemo(false); setTab("painel"); }}
+              onSelect={entry => { setResult(entry.result); setCurrentEntryId(entry.id); setIsDemo(false); setTab("painel"); }}
               onClear={async () => {
-              try { await apiFetch("/analyses", { method: "DELETE" }); } catch { /* offline */ }
-              clearHistory();
-              setHistory([]);
-              setResult(null);
-              setIsDemo(false);
-            }}
+                try { await apiFetch("/analyses", { method: "DELETE" }); } catch { /* offline */ }
+                clearHistory();
+                setHistory([]);
+                setResult(null);
+                setCurrentEntryId(null);
+                setIsDemo(false);
+              }}
+              onDelete={async (id) => {
+                try { await apiFetch(`/analyses/${id}`, { method: "DELETE" }); } catch { /* offline */ }
+                removeFromHistory(id);
+                setHistory(prev => prev.filter(e => e.id !== id));
+                if (currentEntryId === id) { setResult(null); setCurrentEntryId(null); }
+              }}
             />
           </div>
         </div>
@@ -189,41 +226,19 @@ function DashboardInner() {
         {tab === "painel" && result && (
           <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px 60px" }}>
 
-            {/* Hero header */}
-            <div style={{ marginBottom: 32, display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--amber)", marginBottom: 8 }}>
-                  {isDemo ? "Demonstração" : "Análise Operacional"}
-                </p>
-                <h1 className="heading-lg" style={{ color: "var(--text)", marginBottom: 8 }}>Painel Operacional</h1>
-                <p style={{ fontSize: 14, color: "var(--text-2)" }}>
-                  {result.total_skus} SKUs analisados
-                  {(result.categorias?.length ?? 0) > 0 && ` · ${result.categorias.length} categorias`}
-                  {" · "}
-                  <button onClick={() => setTab("ranking")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--amber)", fontSize: 14, fontFamily: "inherit", fontWeight: 500, padding: 0 }}>
-                    ver ranking completo →
-                  </button>
-                </p>
-              </div>
-
-              {/* Categoria pills */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", maxWidth: 320 }}>
-                {(result.categorias ?? []).slice(0, 4).map(cat => {
-                  const n = result.resultados.filter(r => r.categoria === cat && r.score_ruptura >= 71).length;
-                  return (
-                    <span key={cat} style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20, border: `1px solid ${n > 0 ? "#FECACA" : "var(--border)"}`, background: n > 0 ? "#FEF2F2" : "#F9F9FB", color: n > 0 ? "#DC2626" : "var(--text-2)" }}>
-                      {cat}{n > 0 ? ` · ${n}` : ""}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
+            <PageHeader
+              eyebrow={isDemo ? "Demonstração" : "Análise Operacional"}
+              title="Painel Operacional"
+              subtitle={<>{result.total_skus} SKUs analisados{(result.categorias?.length ?? 0) > 0 && ` · ${result.categorias.length} categorias`} · <button onClick={() => setTab("ranking")} className="text-accent hover:underline" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "inherit", fontFamily: "inherit", padding: 0 }}>ver ranking completo →</button></>}
+              right={<div className="flex flex-wrap gap-2">{(result.categorias ?? []).slice(0, 4).map(cat => { const n = result.resultados.filter(r => r.categoria === cat && r.score_ruptura >= 71).length; return <span key={cat} className="text-[12px] px-3 py-1 rounded-full border" style={{ border: `1px solid ${n > 0 ? "var(--danger)" : "var(--border)"}`, background: n > 0 ? "color-mix(in oklab,var(--danger) 8%,transparent)" : "var(--card)", color: n > 0 ? "var(--danger)" : "var(--muted-foreground)" }}>{cat}{n > 0 ? ` · ${n}` : ""}</span>; })}</div>}
+            />
 
             {/* Métricas */}
             <SummaryCards
               totalSkus={result.total_skus}
               skusCriticos={result.skus_criticos}
               perdaTotal={result.perda_total_estimada}
+              receitaPotencial={result.receita_potencial_total}
               categorias={result.categorias ?? []}
               topSku={topSku}
             />
@@ -242,7 +257,7 @@ function DashboardInner() {
             )}
 
             <ErrorBoundary label="Gráficos">
-              <DashboardCharts result={result} />
+              <DashboardCharts result={result} receitaPotencial={result.receita_potencial_total} />
             </ErrorBoundary>
 
             {/* Relatório resumido (no-print do full) */}
@@ -269,13 +284,7 @@ function DashboardInner() {
         {/* ── RANKING ─────────────────────────────────────── */}
         {tab === "ranking" && result && (
           <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px 60px" }}>
-            <div style={{ marginBottom: 28 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--amber)", marginBottom: 8 }}>Inteligência Operacional</p>
-              <h2 className="heading-lg" style={{ color: "var(--text)", marginBottom: 8 }}>Ranking de Risco</h2>
-              <p style={{ fontSize: 14, color: "var(--text-2)" }}>
-                {result.resultados.length} SKUs ordenados por score de ruptura · clique em uma linha para expandir
-              </p>
-            </div>
+            <PageHeader eyebrow="Inteligência Operacional" title="Ranking de Risco" subtitle={`${result.resultados.length} SKUs ordenados por score de ruptura · clique em uma linha para expandir`} />
             <RiskTable rows={result.resultados} categorias={result.categorias ?? []} />
           </div>
         )}
@@ -283,16 +292,9 @@ function DashboardInner() {
         {/* ── RELATÓRIO ───────────────────────────────────── */}
         {tab === "relatorio" && result && (
           <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px 60px" }}>
-            <div style={{ marginBottom: 28, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--amber)", marginBottom: 8 }}>Gerado por Gemini Flash</p>
-                <h2 className="heading-lg" style={{ color: "var(--text)", marginBottom: 8 }}>Relatório Executivo</h2>
-                <p style={{ fontSize: 14, color: "var(--text-2)" }}>Análise completa em linguagem de negócio</p>
-              </div>
-              <button onClick={exportPDF} className="btn-ghost no-print" style={{ fontSize: 13, padding: "10px 18px", borderRadius: 9, marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                ↓ Exportar PDF
-              </button>
-            </div>
+            <PageHeader eyebrow="Gerado por Gemini Flash" title="Relatório Executivo" subtitle="Análise completa em linguagem de negócio"
+              right={<button onClick={exportPDF} className="btn-ghost no-print" style={{ fontSize: 13, padding: "10px 18px", borderRadius: 9, display: "flex", alignItems: "center", gap: 6 }}>↓ Exportar PDF</button>}
+            />
             <ErrorBoundary label="Relatório">
               <ReportSection relatorio={result.relatorio ?? "Relatório não disponível."} />
             </ErrorBoundary>
@@ -302,18 +304,15 @@ function DashboardInner() {
         {/* ── IMPORTAR ─────────────────────────────────────── */}
         {tab === "importar" && (
           <div style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 60px" }}>
-            <div style={{ marginBottom: 28 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--amber)", marginBottom: 8 }}>Upload de arquivo</p>
-              <h2 className="heading-lg" style={{ color: "var(--text)", marginBottom: 8 }}>Importar Planilha</h2>
-              <p style={{ fontSize: 14, color: "var(--text-2)" }}>Aceita Excel (.xlsx) e CSV. Máximo 10 MB.</p>
-            </div>
+            <PageHeader eyebrow="Upload de arquivo" title="Importar Planilha" subtitle="Aceita Excel (.xlsx) e CSV. Máximo 10 MB." />
             <UploadZone onResult={handleResult} onLoading={setLoading} loading={loading} />
           </div>
         )}
 
         {/* ── ESTOQUE (CRUD) ────────────────────────────────── */}
         {tab === "estoque" && (
-          <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+          <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px 60px" }}>
+            <PageHeader eyebrow="Gestão de Estoque" title="Inventário" subtitle="Cadastro, ajustes e análise de itens em estoque" />
             <InventoryManager
               onAnalyze={data => { handleResult(data); setTab("painel"); }}
               onLoading={setLoading}
@@ -324,7 +323,8 @@ function DashboardInner() {
 
         {/* ── CADASTRAR ─────────────────────────────────────── */}
         {tab === "manual" && (
-          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px 60px" }}>
+            <PageHeader eyebrow="Cadastro Manual" title="Novo Item" subtitle="Adicione produtos ao inventário um a um" />
             <ManualEntry onResult={handleResult} onLoading={setLoading} loading={loading} />
           </div>
         )}
