@@ -75,9 +75,13 @@ def run_analysis_pipeline(df: pd.DataFrame) -> AnalysisSummary:
         )
         receita_potencial = round(float(row["estoque_atual"]) * float(row["preco_medio"]), 2)
 
+        ean_raw = row.get("ean")
+        ean = str(ean_raw) if ean_raw and not (isinstance(ean_raw, float) and pd.isna(ean_raw)) else None
+
         resultados.append(AnalysisResponse(
             sku=str(row["sku"]),
             nome=str(row["nome"]),
+            ean=ean,
             loja=str(row["loja"]),
             categoria=str(row.get("categoria", "Sem Categoria")),
             cobertura_dias=row["cobertura_dias"],

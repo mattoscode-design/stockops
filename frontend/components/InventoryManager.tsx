@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { AnalysisResult } from "@/types/analysis";
-import { apiFetch } from "@/lib/api";
+import type { AnalysisResult, InventorySnapshotItem, InventoryResponse } from "@/types/analysis";
+import { apiFetch, getInventories, createInventory, activateInventory } from "@/lib/api";
 import {
   loadInventory, addItem, updateItem, adjustStock, deleteItem,
-  loadMovements, importFromAnalysis, clearInventory,
+  loadMovements, importFromAnalysis,
   type InventoryItem, type Movimento,
 } from "@/lib/inventory";
 import { toast } from "@/components/Toast";
@@ -36,9 +36,12 @@ interface Props {
   onAnalyze: (data: AnalysisResult) => void;
   onLoading: (v: boolean) => void;
   loading: boolean;
+  snapshot?: InventorySnapshotItem[];               // C4: externo (HistoryPanel)
+  onClearSnapshot?: () => void;
+  onItemsChange?: (items: InventoryItem[]) => void; // B1: badge ao vivo
 }
 
-export default function InventoryManager({ onAnalyze, onLoading, loading }: Props) {
+export default function InventoryManager({ onAnalyze, onLoading, loading, snapshot, onClearSnapshot, onItemsChange }: Props) {
   const [items,   setItems]   = useState<InventoryItem[]>([]);
   const [editRow, setEditRow] = useState<EditRow>(null);
   const [editBuf, setEditBuf] = useState<Partial<InventoryItem>>({});
@@ -49,10 +52,26 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
   const [showHist, setShowHist] = useState<string | null>(null);
   const [histMovimentos, setHistMovimentos] = useState<Movimento[]>([]);
   const [addMode,  setAddMode]  = useState(false);
-  const [newRow,   setNewRow]   = useState<Partial<InventoryItem>>({ sku:"", loja:"", categoria:"", estoque_atual:0, vendas_diarias:0, preco_medio:0, promocao_planejada:0 });
+  const [newRow,   setNewRow]   = useState<Partial<InventoryItem>>({ sku:"", ean:"", loja:"", categoria:"", estoque_atual:0, vendas_diarias:0, preco_medio:0, promocao_planejada:0 });
   const [search,   setSearch]   = useState("");
+  // F8: API inventory state
+  const [inventories,      setInventories]      = useState<InventoryResponse[]>([]);
+  const [activeInventoryId, setActiveInventoryId] = useState<string | null>(null);
+  const [showNewModal,     setShowNewModal]     = useState(false);
+  const [newInventoryName, setNewInventoryName] = useState("");
+  const [creatingInventory, setCreatingInventory] = useState(false);
 
-  const reload = useCallback(async () => setItems(await loadInventory()), []);
+  const reload = useCallback(async () => {
+    const loaded = await loadInventory(activeInventoryId ?? undefined);
+    setItems(loaded);
+    onItemsChange?.(loaded);
+  }, [onItemsChange, activeInventoryId]);
+
+  // F8: load inventories list on mount
+  useEffect(() => {
+    getInventories().then(setInventories);
+  }, []);
+
   useEffect(() => { reload(); }, [reload]);
 
   useEffect(() => {
@@ -60,16 +79,10 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
     loadMovements(showHist).then(setHistMovimentos);
   }, [showHist]);
 
-  const filtered = items.filter(i =>
-    !search || i.sku.toLowerCase().includes(search.toLowerCase()) ||
-    i.loja.toLowerCase().includes(search.toLowerCase()) ||
-    i.categoria.toLowerCase().includes(search.toLowerCase())
-  );
-
   /* ── Edição inline ───────────────────────────────────── */
   function startEdit(item: InventoryItem) {
     setEditRow(item.id);
-    setEditBuf({ sku: item.sku, loja: item.loja, categoria: item.categoria,
+    setEditBuf({ sku: item.sku, ean: item.ean, loja: item.loja, categoria: item.categoria,
       estoque_atual: item.estoque_atual, vendas_diarias: item.vendas_diarias,
       preco_medio: item.preco_medio, promocao_planejada: item.promocao_planejada });
   }
@@ -84,7 +97,7 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
   /* ── Ajuste de estoque ────────────────────────────────── */
   async function submitAdjust() {
     if (!adjModal || !adjQtd) return;
-    await adjustStock(adjModal.id, adjTipo, Number(adjQtd), adjObs);
+    await adjustStock(adjModal.id, adjTipo, Number(adjQtd), adjModal.estoque, adjObs);
     toast(`${adjTipo === "saida" ? "Saída" : "Entrada"} de ${adjQtd} un. registrada — ${adjModal.sku}`, adjTipo === "saida" ? "warning" : "success");
     setAdjModal(null); setAdjQtd(""); setAdjObs("");
     reload();
@@ -93,12 +106,12 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
   /* ── Adicionar novo item ─────────────────────────────── */
   async function submitAdd() {
     if (!newRow.sku?.trim() || !newRow.loja?.trim()) return;
-    await addItem({ sku: newRow.sku!, loja: newRow.loja!, categoria: newRow.categoria || "Sem Categoria",
+    await addItem({ sku: newRow.sku!, ean: newRow.ean || undefined, loja: newRow.loja!, categoria: newRow.categoria || "Sem Categoria",
       estoque_atual: Number(newRow.estoque_atual) || 0, vendas_diarias: Number(newRow.vendas_diarias) || 0,
       preco_medio: Number(newRow.preco_medio) || 0, promocao_planejada: Number(newRow.promocao_planejada) || 0 });
     toast(`${newRow.sku} adicionado ao inventário`, "success");
     setAddMode(false);
-    setNewRow({ sku:"", loja:"", categoria:"", estoque_atual:0, vendas_diarias:0, preco_medio:0, promocao_planejada:0 });
+    setNewRow({ sku:"", ean:"", loja:"", categoria:"", estoque_atual:0, vendas_diarias:0, preco_medio:0, promocao_planejada:0 });
     reload();
   }
 
@@ -106,24 +119,85 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
   async function analyzeAll() {
     if (items.length === 0) return;
     onLoading(true);
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const lines = items.map(i =>
-      `"${i.sku}","${i.loja}","${i.categoria}",${i.estoque_atual},${i.vendas_diarias},${i.preco_medio},${i.promocao_planejada}`
+      `${esc(i.sku)},${esc(i.ean ?? "")},${esc(i.loja)},${esc(i.categoria)},${i.estoque_atual},${i.vendas_diarias},${i.preco_medio},${i.promocao_planejada}`
     );
-    const csv = `sku,loja,categoria,estoque_atual,vendas_diarias,preco_medio,promocao_planejada\n${lines.join("\n")}`;
+    const csv = `sku,ean,loja,categoria,estoque_atual,vendas_diarias,preco_medio,promocao_planejada\n${lines.join("\n")}`;
     const blob = new Blob([csv], { type: "text/csv" });
     const fd = new FormData();
     fd.append("file", blob, "estoque_atual.csv");
     try {
-      const res = await apiFetch("/analysis/upload", { method: "POST", body: fd });
+      const path = activeInventoryId
+        ? `/analysis/upload?inventory_id=${activeInventoryId}`
+        : "/analysis/upload";
+      const res = await apiFetch(path, { method: "POST", body: fd });
       if (res.ok) onAnalyze(await res.json());
     } catch { /* handled by apiFetch */ }
     finally { onLoading(false); }
   }
 
-  const totalItens = items.length;
-  const totalUnidades = items.reduce((s, i) => s + i.estoque_atual, 0);
-  const rupturas = items.filter(i => i.estoque_atual === 0).length;
-  const criticos = items.filter(i => i.vendas_diarias > 0 && (i.estoque_atual / i.vendas_diarias) < 3).length;
+  /* ── F8: Seletor de inventário ───────────────────────── */
+  async function handleSelectorChange(val: string) {
+    onClearSnapshot?.();
+    if (val === "__live__") {
+      setActiveInventoryId(null);
+    } else {
+      await activateInventory(val);
+      setActiveInventoryId(val);
+    }
+  }
+
+  async function confirmNewInventory() {
+    setCreatingInventory(true);
+    try {
+      const inv = await createInventory(newInventoryName.trim() || undefined);
+      if (!inv) { toast("Erro ao criar inventário", "error"); return; }
+      await activateInventory(inv.id);
+      setInventories(prev => [...prev, inv]);
+      setActiveInventoryId(inv.id);
+      setShowNewModal(false);
+      setNewInventoryName("");
+      toast(`Inventário "${inv.name}" criado`, "success");
+    } finally {
+      setCreatingInventory(false);
+    }
+  }
+
+  /* ── Snapshot state ──────────────────────────────────── */
+  const activeInventory = inventories.find(inv => inv.id === activeInventoryId) ?? null;
+  const isSnapshotInventory = activeInventory?.type === "snapshot";
+
+  // C4: external snapshot passed as prop (from HistoryPanel selection)
+  const snapshotItems: InventoryItem[] | null = snapshot
+    ? snapshot.map((s, idx) => ({
+        id: `snap-${idx}-${s.sku}-${s.loja}`,
+        sku: s.sku,
+        nome: s.nome,
+        ean: s.ean,
+        loja: s.loja,
+        categoria: s.categoria,
+        estoque_atual: s.estoque_atual,
+        vendas_diarias: s.vendas_diarias,
+        preco_medio: s.preco_medio,
+        promocao_planejada: 0,
+        ultima_atualizacao: "snapshot",
+        movimentos: [],
+      }))
+    : null;
+
+  const isReadOnly = !!snapshotItems || isSnapshotInventory;
+  const displayItems = snapshotItems ?? items;
+  const filteredDisplay = displayItems.filter(i =>
+    !search || i.sku.toLowerCase().includes(search.toLowerCase()) ||
+    i.loja.toLowerCase().includes(search.toLowerCase()) ||
+    i.categoria.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalItens = displayItems.length;
+  const totalUnidades = displayItems.reduce((s, i) => s + i.estoque_atual, 0);
+  const rupturas = displayItems.filter(i => i.estoque_atual === 0).length;
+  const criticos = displayItems.filter(i => i.vendas_diarias > 0 && (i.estoque_atual / i.vendas_diarias) < 3).length;
 
   return (
     <div style={{ padding: "32px 24px 60px" }}>
@@ -138,6 +212,58 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
           CRUD completo do seu estoque — adicione, edite, registre entradas/saídas e analise qualquer momento.
         </p>
       </div>
+
+      {/* F8 — Seletor de estoque (API) */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"#9090A8" }}>Estoque</span>
+          <select
+            value={activeInventoryId ?? "__live__"}
+            onChange={e => handleSelectorChange(e.target.value)}
+            style={{ padding:"6px 10px", fontSize:12, borderRadius:8, border:"1px solid #E2E2EA", background:"#fff", color:"#0A0A14", outline:"none", cursor:"pointer", fontFamily:"inherit" }}
+          >
+            <option value="__live__">Estoque Atual</option>
+            {inventories.map(inv => (
+              <option key={inv.id} value={inv.id}>
+                {inv.name}{inv.type === "snapshot" ? " (snapshot)" : ""}{inv.item_count > 0 ? ` · ${inv.item_count} itens` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={() => { setNewInventoryName(""); setShowNewModal(true); }}
+          style={{ background:"#F0F0F5", color:"#52526A", border:"1px solid #E2E2EA", padding:"6px 14px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+        >
+          + Novo Estoque
+        </button>
+      </div>
+
+      {/* Banner — snapshot externo C4 */}
+      {snapshotItems && (
+        <div style={{ marginBottom: 16, padding: "10px 16px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: "#D97706", color: "#FFF" }}>SNAPSHOT</span>
+            <span style={{ fontSize: 12, color: "#92400E" }}>
+              Visualizando o inventário do momento desta análise — {snapshotItems.length} item{snapshotItems.length !== 1 ? "s" : ""}. Edições desabilitadas.
+            </span>
+          </div>
+          {onClearSnapshot && (
+            <button onClick={onClearSnapshot} style={{ background: "transparent", color: "#92400E", border: "1px solid #FCD34D", padding: "4px 12px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+              Voltar ao inventário atual
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Banner — inventário tipo snapshot da API */}
+      {isSnapshotInventory && !snapshotItems && (
+        <div style={{ marginBottom: 16, padding: "10px 16px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: "#D97706", color: "#FFF" }}>SNAPSHOT</span>
+          <span style={{ fontSize: 12, color: "#92400E" }}>
+            Este inventário é somente leitura. Edições desabilitadas.
+          </span>
+        </div>
+      )}
 
       {/* Cards de resumo */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 24 }}>
@@ -166,21 +292,19 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
             onFocus={e => (e.currentTarget.style.borderColor = "#D97706")}
             onBlur={e => (e.currentTarget.style.borderColor = "#E2E2EA")}
           />
-          <span style={{ fontSize:12, color:"#9090A8" }}>{filtered.length}/{totalItens} itens</span>
+          <span style={{ fontSize:12, color:"#9090A8" }}>{filteredDisplay.length}/{totalItens} itens</span>
         </div>
 
         <div style={{ display:"flex", gap:8 }}>
-          <button onClick={() => setAddMode(true)} style={{ background:"var(--amber)", color:"#0B0B0C", border:"none", padding:"8px 18px", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            + Novo produto
-          </button>
-          <button onClick={analyzeAll} disabled={loading || items.length === 0}
-            style={{ background:"#0A0A14", color:"#fff", border:"none", padding:"8px 18px", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity: items.length === 0 ? 0.4 : 1 }}>
-            {loading ? "Analisando…" : "▶ Analisar estoque atual"}
-          </button>
-          {items.length > 0 && (
-            <button onClick={() => { clearInventory(); reload(); }}
-              className="btn-ghost btn-ghost-danger" style={{ fontSize:12, padding:"8px 14px", borderRadius:9 }}>
-              Limpar tudo
+          {!isReadOnly && (
+            <button onClick={() => setAddMode(true)} style={{ background:"var(--amber)", color:"#0B0B0C", border:"none", padding:"8px 18px", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+              + Novo produto
+            </button>
+          )}
+          {!isReadOnly && (
+            <button onClick={analyzeAll} disabled={loading || items.length === 0}
+              style={{ background:"#0A0A14", color:"#fff", border:"none", padding:"8px 18px", borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity: items.length === 0 ? 0.4 : 1 }}>
+              {loading ? "Analisando…" : "▶ Analisar estoque atual"}
             </button>
           )}
         </div>
@@ -189,10 +313,10 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
       {/* Tabela principal */}
       <div style={{ background:"#fff", border:"1px solid #E2E2EA", borderRadius:14, overflow:"hidden", boxShadow:"0 2px 16px rgba(0,0,0,0.04)" }}>
         <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:900 }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1060 }}>
             <thead>
               <tr>
-                {["Produto / SKU","Loja","Categoria","Estoque Atual","Vendas/dia","Preço (R$)","Promo %","Cobertura","Última Atualiz.","Ações"].map(h => (
+                {["Produto / SKU","EAN","Loja","Categoria","Estoque Atual","Vendas/dia","Preço (R$)","Promo %","Cobertura","Última Atualiz.","Ações"].map(h => (
                   <th key={h} style={TH}>{h}</th>
                 ))}
               </tr>
@@ -202,11 +326,11 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
               {/* Linha de adicionar novo */}
               {addMode && (
                 <tr style={{ background:"#FFFBEB" }}>
-                  {(["sku","loja","categoria","estoque_atual","vendas_diarias","preco_medio","promocao_planejada"] as const).map(f => (
+                  {(["sku","ean","loja","categoria","estoque_atual","vendas_diarias","preco_medio","promocao_planejada"] as const).map(f => (
                     <td key={f} style={{ ...TD, padding:"8px 10px" }}>
                       <input
                         type={["estoque_atual","vendas_diarias","preco_medio","promocao_planejada"].includes(f) ? "number" : "text"}
-                        placeholder={f === "sku" ? "Nome do produto *" : f === "loja" ? "Loja *" : f}
+                        placeholder={f === "sku" ? "Nome do produto *" : f === "ean" ? "EAN *" : f === "loja" ? "Loja *" : f}
                         value={String(newRow[f] ?? "")}
                         onChange={e => setNewRow(p => ({ ...p, [f]: e.target.value }))}
                         style={{ ...INP }}
@@ -223,16 +347,16 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
                 </tr>
               )}
 
-              {filtered.length === 0 && !addMode ? (
+              {filteredDisplay.length === 0 && !addMode ? (
                 <tr>
-                  <td colSpan={10} style={{ padding:"56px", textAlign:"center", color:"#9090A8", fontSize:14 }}>
+                  <td colSpan={11} style={{ padding:"56px", textAlign:"center", color:"#9090A8", fontSize:14 }}>
                     {totalItens === 0
                       ? "Nenhum produto cadastrado. Clique em \"+ Novo produto\" ou importe do histórico."
                       : "Nenhum produto corresponde à busca."
                     }
                   </td>
                 </tr>
-              ) : filtered.map((item, idx) => {
+              ) : filteredDisplay.map((item, idx) => {
                 const isEditing = editRow === item.id;
                 const cobertura = item.vendas_diarias > 0 ? (item.estoque_atual / item.vendas_diarias).toFixed(1) : "∞";
                 const cobN = item.vendas_diarias > 0 ? item.estoque_atual / item.vendas_diarias : 99;
@@ -250,6 +374,13 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
                       {isEditing
                         ? <input value={editBuf.sku ?? ""} onChange={e => setEditBuf(p => ({...p, sku: e.target.value}))} style={INP} />
                         : <span style={{ fontFamily:"monospace", fontWeight:600, fontSize:12 }}>{item.sku}</span>
+                      }
+                    </td>
+                    {/* EAN */}
+                    <td style={TD}>
+                      {isEditing
+                        ? <input value={editBuf.ean ?? ""} placeholder="EAN" onChange={e => setEditBuf(p => ({...p, ean: e.target.value}))} style={{ ...INP, width:120 }} />
+                        : <span style={{ fontFamily:"monospace", fontSize:11, color:"#9090A8" }}>{item.ean || "—"}</span>
                       }
                     </td>
                     {/* Loja */}
@@ -304,7 +435,9 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
                     </td>
                     {/* Ações */}
                     <td style={{ ...TD, whiteSpace:"nowrap" }}>
-                      {isEditing ? (
+                      {isReadOnly ? (
+                        <span style={{ fontSize:11, color:"#9090A8" }}>—</span>
+                      ) : isEditing ? (
                         <div style={{ display:"flex", gap:4 }}>
                           <button onClick={() => saveEdit(item.id)} style={{ background:"#16A34A", color:"#fff", border:"none", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>✓ Salvar</button>
                           <button onClick={() => setEditRow(null)} style={{ background:"none", border:"1px solid #E2E2EA", color:"#9090A8", padding:"4px 8px", borderRadius:6, fontSize:11, cursor:"pointer" }}>✕</button>
@@ -354,7 +487,7 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
         </div>
 
         {/* Histórico de movimentos inline */}
-        {showHist && (() => {
+        {showHist && !isReadOnly && (() => {
           const item = items.find(i => i.id === showHist);
           if (!item) return null;
           return (
@@ -390,7 +523,7 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
         })()}
       </div>
 
-      {/* Modal de ajuste de estoque */}
+      {/* Modal ajuste de estoque */}
       {adjModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => { if (e.target === e.currentTarget) setAdjModal(null); }}>
@@ -455,6 +588,46 @@ export default function InventoryManager({ onAnalyze, onLoading, loading }: Prop
                 Confirmar {adjTipo === "saida" ? "Saída" : "Entrada"}
               </button>
               <button onClick={() => setAdjModal(null)}
+                style={{ padding:"12px 20px", borderRadius:10, border:"1px solid #E2E2EA", background:"transparent", fontSize:13, color:"#9090A8", cursor:"pointer", fontFamily:"inherit" }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* F8 — Modal novo inventário */}
+      {showNewModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowNewModal(false); }}>
+          <div style={{ background:"#fff", borderRadius:20, padding:"32px", width:400, boxShadow:"0 24px 80px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ fontSize:18, fontWeight:700, color:"#0A0A14", marginBottom:4 }}>Novo Inventário</h3>
+            <p style={{ fontSize:13, color:"#9090A8", marginBottom:24 }}>
+              Crie um inventário em branco. O nome é opcional — se omitido, será gerado automaticamente.
+            </p>
+
+            <div style={{ marginBottom:24 }}>
+              <label style={{ display:"block", fontSize:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"#9090A8", marginBottom:6 }}>
+                Nome (opcional)
+              </label>
+              <input
+                value={newInventoryName}
+                onChange={e => setNewInventoryName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") confirmNewInventory(); }}
+                placeholder="Ex: Estoque Maio 2026"
+                style={{ width:"100%", padding:"12px 14px", fontSize:14, borderRadius:10, border:"1.5px solid #E2E2EA", outline:"none", color:"#0A0A14", fontFamily:"inherit" }}
+                onFocus={e => (e.currentTarget.style.borderColor = "#D97706")}
+                onBlur={e => (e.currentTarget.style.borderColor = "#E2E2EA")}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={confirmNewInventory} disabled={creatingInventory}
+                style={{ flex:1, background:"#D97706", color:"#fff", border:"none", padding:"12px", borderRadius:10, fontSize:14, fontWeight:600, cursor: creatingInventory ? "not-allowed" : "pointer", opacity: creatingInventory ? 0.6 : 1, fontFamily:"inherit" }}>
+                {creatingInventory ? "Criando…" : "Criar inventário"}
+              </button>
+              <button onClick={() => setShowNewModal(false)}
                 style={{ padding:"12px 20px", borderRadius:10, border:"1px solid #E2E2EA", background:"transparent", fontSize:13, color:"#9090A8", cursor:"pointer", fontFamily:"inherit" }}>
                 Cancelar
               </button>

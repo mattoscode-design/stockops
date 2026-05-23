@@ -1,6 +1,7 @@
 export interface AnalysisRow {
   sku: string;
   nome?: string;
+  ean?: string;
   loja: string;
   categoria: string;
   cobertura_dias: number;
@@ -24,9 +25,29 @@ export interface AnalysisResult {
   resultados: AnalysisRow[];
 }
 
+export interface InventorySnapshotItem {
+  sku: string;
+  nome?: string;
+  ean?: string;
+  loja: string;
+  categoria: string;
+  estoque_atual: number;
+  vendas_diarias: number;
+  preco_medio: number;
+}
+
 export interface HistoryEntry {
   id: string;
   name: string;
   timestamp: string;
   result: AnalysisResult;
+  items_snapshot?: InventorySnapshotItem[];
+}
+
+export interface InventoryResponse {
+  id: string;
+  name: string;
+  type: string;
+  item_count: number;
+  created_at: string;
 }

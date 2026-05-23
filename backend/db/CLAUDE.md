@@ -6,7 +6,7 @@ Você é o **Arquiteto de Dados (Terminal 5)** do StockOps. Seu domínio exclusi
 
 ---
 
-## Estado Atual (2026-05-17) — CONCLUÍDO
+## Estado Atual (2026-05-21) — CONCLUÍDO
 
 - ✅ Migration `001_multi_tenant.sql` executada no Supabase
 - ✅ Migration `002_fix_analyses_schema.sql` executada no Supabase — schema alinhado com código
@@ -19,6 +19,12 @@ Você é o **Arquiteto de Dados (Terminal 5)** do StockOps. Seu domínio exclusi
 - ✅ `.env` com `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY` (formato `sb_secret_*`)
 - ✅ Conexão testada e validada — INSERT/DELETE OK, 62/62 testes passando
 - ✅ Bug B2 fechado: `save_analysis()` capturava PGRST204 silenciosamente — resolvido pela 002
+- ✅ Migration `003_add_validade.sql` executada — `data_validade DATE` nullable em `inventory_items`
+- ✅ Migration `004_add_ean_nome_inventory.sql` executada — `ean TEXT` e `nome TEXT` nullable em `inventory_items`
+- ✅ Migration `005_add_snapshot_updated_at_analyses.sql` executada — `items_snapshot JSONB` e `updated_at TIMESTAMPTZ` em `analyses` (trigger automático set_updated_at)
+- ✅ T4 avisado sobre 004 e 005 — aguardando atualização de models/schemas
+- ✅ Migration `006_add_inventories.sql` executada em produção — tabela `inventories` + `inventory_id` nullable em `inventory_items` + backfill tenant demo + RLS + índices
+- ✅ T4 avisado sobre 006 — aguardando atualização de models/schemas e código
 
 **Causa raiz do banco vazio (B2):** O código Sprint 2 já usava os nomes corretos
 (`perda_total_estimada`, `resultados`, `relatorio`, `user_id` nullable). O banco estava
@@ -70,8 +76,9 @@ tenants (1)
 ```sql
 tenants            → id, name, slug, plan, created_at, active
 users              → id, tenant_id, username, password_hash, role, email, created_at, active
-analyses           → id, tenant_id, user_id (nullable), filename, total_skus, skus_criticos, perda_total_estimada, resultados (JSONB), relatorio (TEXT), created_at
-inventory_items    → id, tenant_id, sku, loja, categoria, estoque_atual, vendas_diarias, preco_medio, updated_at
+analyses           → id, tenant_id, user_id (nullable), filename, total_skus, skus_criticos, perda_total_estimada, resultados (JSONB), relatorio (TEXT), created_at, items_snapshot (JSONB nullable), updated_at (TIMESTAMPTZ)
+inventories        → id, tenant_id, name, description (nullable), created_at, active
+inventory_items    → id, tenant_id, inventory_id (UUID nullable → inventories), sku, loja, categoria, estoque_atual, vendas_diarias, preco_medio, updated_at, data_validade (DATE nullable), ean (TEXT nullable), nome (TEXT nullable)
 inventory_movements→ id, tenant_id, item_id, tipo (entrada|saida), quantidade, motivo, created_at
 ```
 
@@ -133,14 +140,13 @@ Usuário: admin | role=admin | senha=admin123
 ## Próximas Migrations Previstas
 
 ```
-003_delete_analyses.sql   ← se PO decidir pelo DELETE /analyses (botão "Limpar")
-                             T4 implementa o endpoint; T5 avalia impacto no schema
-                             Status: aguardando decisão PO (Q aberta)
-```
+007_?   ← tornar inventory_id NOT NULL em inventory_items
+          Pré-requisito: T4 atualizar todo código para sempre enviar inventory_id
+          Status: aguardando T4 confirmar atualização de código
 
-> As migrations `002_analyses_persistence.sql` e `003_inventory_persistence.sql` previstas
-> anteriormente foram descartadas — a persistência foi implementada diretamente via
-> endpoints REST na Sprint 2 (sem necessidade de alteração de schema).
+008_?   ← avaliar tabela de scores agregados entre tenants para C3 (benchmark de mercado)
+          Status: aguardando definição de requisitos pelo PO
+```
 
 ---
 

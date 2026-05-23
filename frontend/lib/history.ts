@@ -1,4 +1,4 @@
-import type { AnalysisResult, HistoryEntry } from "@/types/analysis";
+import type { AnalysisResult, HistoryEntry, InventorySnapshotItem } from "@/types/analysis";
 
 const STORAGE_KEY = "stockops_history";
 const MAX_ENTRIES = 10;
@@ -9,13 +9,14 @@ function generateName(result: AnalysisResult, index: number): string {
   return `Análise ${date}${criticos} #${index + 1}`;
 }
 
-export function saveToHistory(result: AnalysisResult): HistoryEntry {
+export function saveToHistory(result: AnalysisResult, items_snapshot?: InventorySnapshotItem[]): HistoryEntry {
   const existing = loadHistory();
   const entry: HistoryEntry = {
     id: crypto.randomUUID(),
     name: generateName(result, existing.length),
     timestamp: new Date().toLocaleString("pt-BR"),
     result,
+    items_snapshot: items_snapshot && items_snapshot.length > 0 ? items_snapshot : undefined,
   };
   const updated = [entry, ...existing].slice(0, MAX_ENTRIES);
   try {

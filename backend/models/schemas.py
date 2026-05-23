@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 class AnalysisResponse(BaseModel):
     sku: str
     nome: str
+    ean: Optional[str] = None
     loja: str
     categoria: str
     cobertura_dias: float
@@ -53,29 +54,58 @@ class AnalysisRecord(BaseModel):
     tenant_id: str
     user_id: str | None = None
     created_at: str
+    updated_at: str | None = None
     total_skus: int
     skus_criticos: int
     perda_total_estimada: float
     relatorio: str
     resultados: list[dict]
+    items_snapshot: list[dict] | None = None
+
+
+class InventoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Nome não pode ser vazio")
+        return v
+
+
+class InventoryResponse(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    description: Optional[str] = None
+    active: bool = False
+    created_at: str
 
 
 class InventoryItemCreate(BaseModel):
     sku: str
+    nome: Optional[str] = None
+    ean: Optional[str] = None
     loja: str
     categoria: str = "Sem Categoria"
     estoque_atual: float
     vendas_diarias: float
     preco_medio: float
+    inventory_id: Optional[str] = None
 
 
 class InventoryItemUpdate(BaseModel):
     sku: str | None = None
+    nome: str | None = None
+    ean: str | None = None
     loja: str | None = None
     categoria: str | None = None
     estoque_atual: float | None = None
     vendas_diarias: float | None = None
     preco_medio: float | None = None
+    inventory_id: str | None = None
 
 
 class MovementCreate(BaseModel):

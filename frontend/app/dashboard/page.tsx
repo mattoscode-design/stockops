@@ -21,7 +21,7 @@ import { importFromAnalysis, loadInventory } from "@/lib/inventory";
 import { ToastContainer } from "@/components/Toast";
 import type { AnalysisResult, HistoryEntry } from "@/types/analysis";
 import { saveToHistory, loadHistory, clearHistory, removeFromHistory } from "@/lib/history";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getAnalysisCurrent } from "@/lib/api";
 
 /* Lazy load pesado do recharts */
 const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), {
@@ -69,11 +69,12 @@ function DashboardInner() {
   const [result,   setResult]   = useState<AnalysisResult | null>(null);
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [isDemo,   setIsDemo]   = useState(false);
-  const [invCriticos, setInvCriticos] = useState(0);
+  const [invItems, setInvItems] = useState<import("@/lib/inventory").InventoryItem[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [username, setUsername] = useState("Admin");
   const [history,  setHistory]  = useState<HistoryEntry[]>([]);
   const [tab,      setTabState] = useState<Tab>((params.get("tab") as Tab) ?? "painel");
+  const [inventorySnapshot, setInventorySnapshot] = useState<HistoryEntry["items_snapshot"] | undefined>(undefined);
 
   const setTab = useCallback((t: Tab) => {
     setTabState(t);
@@ -94,20 +95,20 @@ function DashboardInner() {
     setHistory(hist);
   }, [router]);
 
-  // Carrega contador de itens críticos do inventário após mount (evita hydration mismatch)
-  useEffect(() => {
-    loadInventory().then(items => {
-      setInvCriticos(
-        items.filter(i => i.vendas_diarias > 0 && (i.estoque_atual / i.vendas_diarias) < 3).length
-      );
-    });
-  }, []);
+  // B1 — carrega itens do inventário ao montar para badge ao vivo
+  useEffect(() => { loadInventory().then(setInvItems); }, []);
 
-  function handleResult(data: AnalysisResult) {
+  async function handleResult(data: AnalysisResult) {
     setResult(data);
     setCurrentEntryId(null);
     setIsDemo(false);
-    const entry = saveToHistory(data);
+    setInventorySnapshot(undefined);
+    // C4 — captura snapshot do inventário no momento da análise
+    const invItems = await loadInventory();
+    const snapshot = invItems.length > 0
+      ? invItems.map(i => ({ sku: i.sku, nome: i.nome, ean: i.ean, loja: i.loja, categoria: i.categoria, estoque_atual: i.estoque_atual, vendas_diarias: i.vendas_diarias, preco_medio: i.preco_medio }))
+      : undefined;
+    const entry = saveToHistory(data, snapshot);
     setHistory(prev => [entry, ...prev].slice(0, 10));
     setTab("painel");
   }
@@ -179,9 +180,9 @@ function DashboardInner() {
                       {criticos}
                     </span>
                   )}
-                  {t === "estoque" && invCriticos > 0 && (
+                  {t === "estoque" && invItems.length > 0 && (
                     <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-amber-soft px-1.5 font-mono text-[10px] font-semibold text-ink">
-                      {invCriticos}
+                      {invItems.length}
                     </span>
                   )}
                   {isActive && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-accent" />}
@@ -198,7 +199,16 @@ function DashboardInner() {
             )}
             <HistoryPanel
               entries={history}
-              onSelect={entry => { setResult(entry.result); setCurrentEntryId(entry.id); setIsDemo(false); setTab("painel"); }}
+              onSelect={async entry => {
+                // Resposta imediata — carrega resultado do localStorage
+                setResult(entry.result);
+                setCurrentEntryId(entry.id);
+                setIsDemo(false);
+                setTab("painel");
+                // C4 — fonte primária: Supabase; fallback: cache localStorage
+                const apiSnapshot = await getAnalysisCurrent();
+                setInventorySnapshot(apiSnapshot ?? entry.items_snapshot);
+              }}
               onClear={async () => {
                 try { await apiFetch("/analyses", { method: "DELETE" }); } catch { /* offline */ }
                 clearHistory();
@@ -317,6 +327,9 @@ function DashboardInner() {
               onAnalyze={data => { handleResult(data); setTab("painel"); }}
               onLoading={setLoading}
               loading={loading}
+              snapshot={inventorySnapshot}
+              onClearSnapshot={() => setInventorySnapshot(undefined)}
+              onItemsChange={setInvItems}
             />
           </div>
         )}
@@ -330,7 +343,6 @@ function DashboardInner() {
         )}
       </div>
 
-      {result && <ChatBot result={result} />}
       <ToastContainer />
     </div>
   );
