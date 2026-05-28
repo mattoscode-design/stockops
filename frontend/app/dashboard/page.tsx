@@ -15,11 +15,12 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/EmptyState";
 import { SkeletonCard, SkeletonCharts } from "@/components/SkeletonLoader";
 import ScoreHistory from "@/components/ScoreHistory";
+import AnalysisTimeline from "@/components/AnalysisTimeline";
 import { loadInventory } from "@/lib/inventory";
 import { ToastContainer } from "@/components/Toast";
-import type { AnalysisResult, HistoryEntry } from "@/types/analysis";
+import type { AnalysisResult, HistoryEntry, AnalysisRecord } from "@/types/analysis";
 import { saveToHistory, loadHistory, clearHistory, removeFromHistory } from "@/lib/history";
-import { apiFetch, getAnalysisCurrent, getMe, getCachedProfile, setCachedProfile } from "@/lib/api";
+import { apiFetch, getAnalysisCurrent, getMe, getAnalysesHistory, getCachedProfile, setCachedProfile } from "@/lib/api";
 import type { UserProfile } from "@/lib/api";
 import ProfileModal from "@/components/ProfileModal";
 import NotificationBell from "@/components/NotificationBell";
@@ -104,6 +105,7 @@ function DashboardInner() {
   const [invItems, setInvItems] = useState<import("@/lib/inventory").InventoryItem[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [booting,  setBooting]  = useState(true);
+  const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>([]);
   const [username, setUsername] = useState<string>("...");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [highlightSku, setHighlightSku] = useState<string | null>(null);
@@ -145,11 +147,12 @@ function DashboardInner() {
     const localHistory = loadHistory();
     setHistory(localHistory);
 
-    // Boot paralelo: perfil + inventário em Promise.all
+    // Boot paralelo: perfil + inventário + histórico de análises em Promise.all
     Promise.all([
       getMe(),
       loadInventory(),
-    ]).then(([profile, items]) => {
+      getAnalysesHistory(),
+    ]).then(([profile, items, records]) => {
       setBooting(false);
       if (!profile) {
         // Token inválido/expirado — localStorage já foi limpo por getMe
@@ -160,6 +163,7 @@ function DashboardInner() {
       setUserProfile(profile);
       setUsername(resolveDisplayName(profile));
       setInvItems(items);
+      setAnalysisRecords(records);
       if (!profile.nome_exibicao || !profile.username) {
         setShowOnboarding(true);
       }
@@ -341,6 +345,12 @@ function DashboardInner() {
             {history.length >= 2 && !isDemo && (
               <ErrorBoundary label="Histórico de Scores">
                 <ScoreHistory history={history} />
+              </ErrorBoundary>
+            )}
+
+            {analysisRecords.length >= 2 && !isDemo && (
+              <ErrorBoundary label="Linha do Tempo de Análises">
+                <AnalysisTimeline records={analysisRecords} />
               </ErrorBoundary>
             )}
 

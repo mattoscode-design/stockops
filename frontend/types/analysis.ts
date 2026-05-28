@@ -51,3 +51,20 @@ export interface InventoryResponse {
   item_count: number;
   created_at: string;
 }
+
+export interface AnalysisResultItem {
+  sku: string;
+  score_ruptura: number;
+  perda_estimada_reais: number;
+  classificacao: string;
+}
+
+export interface AnalysisRecord {
+  id: string;
+  created_at: string;
+  total_skus: number;
+  skus_criticos: number;
+  perda_total_estimada: number;
+  relatorio: string;
+  resultados: AnalysisResultItem[];
+}
