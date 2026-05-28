@@ -35,28 +35,28 @@ export default function ReportSection({ relatorio }: Props) {
         </button>
       </div>
 
-      <div className="px-6 py-5" style={{ background: "var(--surface)" }}>
+      <div id="relatorio-pdf" className="px-6 py-5" style={{ background: "#ffffff", color: "#0A0A14" }}>
         <ReactMarkdown
           components={{
             h2: ({ children }) => (
               <h3 className="text-sm font-semibold mt-5 mb-2 tracking-wide first:mt-0"
-                style={{ color: "var(--amber)" }}>
+                style={{ color: "#D97706" }}>
                 {children}
               </h3>
             ),
             p: ({ children }) => (
-              <p className="text-sm mb-2" style={{ color: "var(--text)", lineHeight: 1.65 }}>
+              <p className="text-sm mb-2" style={{ color: "#0A0A14", lineHeight: 1.65 }}>
                 {children}
               </p>
             ),
             li: ({ children }) => (
-              <li className="text-sm mb-1 ml-4" style={{ color: "var(--text)", listStyle: "disc" }}>
+              <li className="text-sm mb-1 ml-4" style={{ color: "#0A0A14", listStyle: "disc" }}>
                 {children}
               </li>
             ),
             ul: ({ children }) => <ul className="mb-3">{children}</ul>,
             strong: ({ children }) => (
-              <strong style={{ color: "var(--text)", fontWeight: 600 }}>{children}</strong>
+              <strong style={{ color: "#0A0A14", fontWeight: 600 }}>{children}</strong>
             ),
           }}>
           {relatorio}

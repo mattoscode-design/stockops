@@ -21,6 +21,7 @@ import { ToastContainer } from "@/components/Toast";
 import type { AnalysisResult, HistoryEntry, AnalysisRecord } from "@/types/analysis";
 import { saveToHistory, loadHistory, clearHistory, removeFromHistory } from "@/lib/history";
 import { apiFetch, getAnalysisCurrent, getMe, getAnalysesHistory, getCachedProfile, setCachedProfile } from "@/lib/api";
+import { exportRelatorioPDF } from "@/lib/pdf";
 import type { UserProfile } from "@/lib/api";
 import ProfileModal from "@/components/ProfileModal";
 import NotificationBell from "@/components/NotificationBell";
@@ -105,6 +106,7 @@ function DashboardInner() {
   const [invItems, setInvItems] = useState<import("@/lib/inventory").InventoryItem[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [booting,  setBooting]  = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>([]);
   const [username, setUsername] = useState<string>("...");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -185,10 +187,14 @@ function DashboardInner() {
     setTab("painel");
   }
 
-  function exportPDF() {
-    document.title = `StockOps — Relatório ${new Date().toLocaleDateString("pt-BR")}`;
-    window.print();
-    setTimeout(() => { document.title = "StockOps — IA Operacional"; }, 1000);
+  async function exportPDF() {
+    if (pdfLoading) return;
+    setPdfLoading(true);
+    try {
+      await exportRelatorioPDF(username);
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   const criticos = result?.resultados.filter(r => r.score_ruptura >= 71).length ?? 0;
@@ -275,8 +281,8 @@ function DashboardInner() {
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {result && !isDemo && (
-              <button onClick={exportPDF} className="btn-ghost no-print" style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, display: "flex", alignItems: "center", gap: 5 }}>
-                ↓ Exportar PDF
+              <button onClick={exportPDF} disabled={pdfLoading} className="btn-ghost no-print" style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, display: "flex", alignItems: "center", gap: 5, opacity: pdfLoading ? 0.6 : 1 }}>
+                {pdfLoading ? "Gerando..." : "↓ Exportar PDF"}
               </button>
             )}
             <HistoryPanel
@@ -396,7 +402,7 @@ function DashboardInner() {
         {tab === "relatorio" && result && (
           <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px 60px" }}>
             <PageHeader eyebrow="Gerado por Gemini Flash" title="Relatório Executivo" subtitle="Análise completa em linguagem de negócio"
-              right={<button onClick={exportPDF} className="btn-ghost no-print" style={{ fontSize: 13, padding: "10px 18px", borderRadius: 9, display: "flex", alignItems: "center", gap: 6 }}>↓ Exportar PDF</button>}
+              right={<button onClick={exportPDF} disabled={pdfLoading} className="btn-ghost no-print" style={{ fontSize: 13, padding: "10px 18px", borderRadius: 9, display: "flex", alignItems: "center", gap: 6, opacity: pdfLoading ? 0.6 : 1 }}>{pdfLoading ? "Gerando..." : "↓ Exportar PDF"}</button>}
             />
             <ErrorBoundary label="Relatório">
               <ReportSection relatorio={result.relatorio ?? "Relatório não disponível."} />
