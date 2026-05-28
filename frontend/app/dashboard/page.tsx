@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutDashboard, ListOrdered, FileText, Package, ArrowUpFromLine, Plus } from "lucide-react";
+import { LayoutDashboard, ListOrdered, FileText, Package, ArrowUpFromLine, Plus, Users } from "lucide-react";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import UploadZone from "@/components/UploadZone";
@@ -10,18 +10,19 @@ import ManualEntry from "@/components/ManualEntry";
 import SummaryCards from "@/components/SummaryCards";
 import RiskTable from "@/components/RiskTable";
 import HistoryPanel from "@/components/HistoryPanel";
-import ReportSection from "@/components/ReportSection";
 import ChatBot from "@/components/ChatBot";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/EmptyState";
-import { SkeletonCharts, SkeletonTable } from "@/components/SkeletonLoader";
+import { SkeletonCard, SkeletonCharts } from "@/components/SkeletonLoader";
 import ScoreHistory from "@/components/ScoreHistory";
-import InventoryManager, { useImportToInventory } from "@/components/InventoryManager";
-import { importFromAnalysis, loadInventory } from "@/lib/inventory";
+import { loadInventory } from "@/lib/inventory";
 import { ToastContainer } from "@/components/Toast";
 import type { AnalysisResult, HistoryEntry } from "@/types/analysis";
 import { saveToHistory, loadHistory, clearHistory, removeFromHistory } from "@/lib/history";
-import { apiFetch, getAnalysisCurrent } from "@/lib/api";
+import { apiFetch, getAnalysisCurrent, getMe, getCachedProfile, setCachedProfile } from "@/lib/api";
+import type { UserProfile } from "@/lib/api";
+import ProfileModal from "@/components/ProfileModal";
+import NotificationBell from "@/components/NotificationBell";
 
 /* Lazy load pesado do recharts */
 const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), {
@@ -29,7 +30,37 @@ const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), {
   loading: () => <SkeletonCharts />,
 });
 
-type Tab = "painel" | "ranking" | "relatorio" | "estoque" | "importar" | "manual";
+/* Lazy load de tabs pesadas */
+const ReportSection = dynamic(() => import("@/components/ReportSection"), {
+  ssr: false,
+  loading: () => <SkeletonCard height={300} />,
+});
+const InventoryManager = dynamic(() => import("@/components/InventoryManager"), {
+  ssr: false,
+  loading: () => <SkeletonCard height={300} />,
+});
+const EquipeTab = dynamic(() => import("@/components/EquipeTab"), {
+  ssr: false,
+  loading: () => <SkeletonCard height={300} />,
+});
+
+type Tab = "painel" | "ranking" | "relatorio" | "estoque" | "importar" | "manual" | "equipe";
+
+function resolveDisplayName(profile: UserProfile | null, emailFallback?: string | null): string {
+  const empresa = profile?.empresa_nome?.trim();
+  if (empresa) return empresa;
+
+  const nomeExibicao = profile?.nome_exibicao?.trim();
+  if (nomeExibicao) return nomeExibicao;
+
+  const username = profile?.username?.trim();
+  if (username) return username;
+
+  const email = (emailFallback ?? profile?.email ?? "").trim();
+  if (email.includes("@")) return email.split("@")[0];
+
+  return "...";
+}
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -60,6 +91,7 @@ const TAB_CONFIG: Record<Tab, { label: string; Icon: TabIcon }> = {
   estoque:   { label: "Estoque",      Icon: Package },
   importar:  { label: "Importar",     Icon: ArrowUpFromLine },
   manual:    { label: "Cadastrar",    Icon: Plus },
+  equipe:    { label: "Equipe",       Icon: Users },
 };
 
 function DashboardInner() {
@@ -71,7 +103,12 @@ function DashboardInner() {
   const [isDemo,   setIsDemo]   = useState(false);
   const [invItems, setInvItems] = useState<import("@/lib/inventory").InventoryItem[]>([]);
   const [loading,  setLoading]  = useState(false);
-  const [username, setUsername] = useState("Admin");
+  const [booting,  setBooting]  = useState(true);
+  const [username, setUsername] = useState<string>("...");
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [highlightSku, setHighlightSku] = useState<string | null>(null);
+  const [showProfileModal,  setShowProfileModal]  = useState(false);
+  const [showOnboarding,    setShowOnboarding]    = useState(false);
   const [history,  setHistory]  = useState<HistoryEntry[]>([]);
   const [tab,      setTabState] = useState<Tab>((params.get("tab") as Tab) ?? "painel");
   const [inventorySnapshot, setInventorySnapshot] = useState<HistoryEntry["items_snapshot"] | undefined>(undefined);
@@ -84,19 +121,50 @@ function DashboardInner() {
   }, [router]);
 
   useEffect(() => {
+    const cachedProfile = getCachedProfile();
+    if (cachedProfile) {
+      setUserProfile(cachedProfile);
+      setUsername(resolveDisplayName(cachedProfile));
+    }
+
     const token = localStorage.getItem("token");
-    if (!token) { router.push("/"); return; }
+    if (!token) { window.location.replace("/"); return; }
     try {
       const p = JSON.parse(atob(token.split(".")[1]));
-      setUsername(p.sub ?? "Admin");
-    } catch { /* mantém Admin */ }
+      if (p.exp && p.exp * 1000 < Date.now()) {
+        localStorage.removeItem("token");
+        window.location.replace("/");
+        return;
+      }
+    } catch {
+      localStorage.removeItem("token");
+      window.location.replace("/");
+      return;
+    }
 
-    const hist = loadHistory();
-    setHistory(hist);
+    const localHistory = loadHistory();
+    setHistory(localHistory);
+
+    // Boot paralelo: perfil + inventário em Promise.all
+    Promise.all([
+      getMe(),
+      loadInventory(),
+    ]).then(([profile, items]) => {
+      setBooting(false);
+      if (!profile) {
+        // Token inválido/expirado — localStorage já foi limpo por getMe
+        window.location.replace("/");
+        return;
+      }
+      setCachedProfile(profile);
+      setUserProfile(profile);
+      setUsername(resolveDisplayName(profile));
+      setInvItems(items);
+      if (!profile.nome_exibicao || !profile.username) {
+        setShowOnboarding(true);
+      }
+    }).catch(() => { setBooting(false); });
   }, [router]);
-
-  // B1 — carrega itens do inventário ao montar para badge ao vivo
-  useEffect(() => { loadInventory().then(setInvItems); }, []);
 
   async function handleResult(data: AnalysisResult) {
     setResult(data);
@@ -121,9 +189,12 @@ function DashboardInner() {
 
   const criticos = result?.resultados.filter(r => r.score_ruptura >= 71).length ?? 0;
   const topSku   = result?.resultados[0]?.sku;
-  const tabs: Tab[] = result
-    ? ["painel","ranking","relatorio","estoque","importar","manual"]
-    : ["estoque","importar","manual"];
+  const isAdmin  = userProfile?.tipo_perfil === "empresa";
+  const tabs: Tab[] = [
+    ...(result ? (["painel","ranking","relatorio"] as Tab[]) : []),
+    "estoque", "importar", "manual",
+    ...(isAdmin ? (["equipe"] as Tab[]) : []),
+  ];
 
   const CARD: React.CSSProperties = {
     background: "#fff", border: "1px solid #E8E8EF", borderRadius: 16,
@@ -143,6 +214,13 @@ function DashboardInner() {
             setResult(null);
             setTab("painel");
           }}
+          onProfileClick={() => setShowProfileModal(true)}
+          actionsSlot={
+            <NotificationBell
+              result={result}
+              onStockAlertClick={sku => { setHighlightSku(sku); setTab("estoque"); }}
+            />
+          }
         />
 
         {/* Banner demo */}
@@ -284,7 +362,12 @@ function DashboardInner() {
         )}
 
         {/* ── PAINEL VAZIO ────────────────────────────────── */}
-        {tab === "painel" && !result && (
+        {tab === "painel" && !result && booting && (
+          <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px 60px" }}>
+            <SkeletonCharts />
+          </div>
+        )}
+        {tab === "painel" && !result && !booting && (
           <EmptyState
             onImportClick={() => setTab("importar")}
             onManualClick={() => setTab("manual")}
@@ -322,6 +405,14 @@ function DashboardInner() {
         {/* ── ESTOQUE (CRUD) ────────────────────────────────── */}
         {tab === "estoque" && (
           <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px 60px" }}>
+            {highlightSku && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "color-mix(in oklab, var(--amber,#E6A817) 10%, transparent)", border: "1px solid color-mix(in oklab, var(--amber,#E6A817) 30%, transparent)" }}>
+                <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>
+                  Atenção: <strong>{highlightSku}</strong> está com score de ruptura crítico.
+                </span>
+                <button onClick={() => setHighlightSku(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex" }}>✕</button>
+              </div>
+            )}
             <PageHeader eyebrow="Gestão de Estoque" title="Inventário" subtitle="Cadastro, ajustes e análise de itens em estoque" />
             <InventoryManager
               onAnalyze={data => { handleResult(data); setTab("painel"); }}
@@ -341,9 +432,45 @@ function DashboardInner() {
             <ManualEntry onResult={handleResult} onLoading={setLoading} loading={loading} />
           </div>
         )}
+
+        {/* ── EQUIPE (admin only) ───────────────────────────── */}
+        {tab === "equipe" && isAdmin && (
+          <div>
+            <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px 8px" }}>
+              <PageHeader eyebrow="Gestão de Equipe" title="Equipe" subtitle="Membros, solicitações de entrada e convites" />
+            </div>
+            <EquipeTab />
+          </div>
+        )}
       </div>
 
       <ToastContainer />
+
+      {/* Modal de onboarding — exibido na primeira vez, sem fechar até salvar */}
+      {showOnboarding && userProfile && (
+        <ProfileModal
+          profile={userProfile}
+          isOnboarding
+          onSaved={updated => {
+            setUserProfile(updated);
+            setUsername(resolveDisplayName(updated));
+            setShowOnboarding(false);
+          }}
+        />
+      )}
+
+      {/* Modal de edição de perfil — aberto pelo avatar na Navbar */}
+      {showProfileModal && userProfile && (
+        <ProfileModal
+          profile={userProfile}
+          onSaved={updated => {
+            setUserProfile(updated);
+            setUsername(resolveDisplayName(updated));
+            setShowProfileModal(false);
+          }}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
     </div>
   );
 }
