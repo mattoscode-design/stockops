@@ -8,7 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 import os
 
 from middleware.rate_limit import limiter
-from routers import auth, analysis, chat, api_v1, inventory, analyses, inventories
+from routers import auth, analysis, chat, api_v1, inventory, analyses, inventories, tenants
 
 _CYAN  = "\033[96m"
 _AMBER = "\033[93m"
@@ -91,6 +91,7 @@ app.include_router(api_v1.router)
 app.include_router(inventory.router)
 app.include_router(inventories.router)
 app.include_router(analyses.router)
+app.include_router(tenants.router)
 
 
 @app.get("/health")

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, useRef, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
@@ -23,6 +23,8 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { setCachedProfile } from "@/lib/api";
+import type { UserProfile } from "@/lib/api";
 
 function Nav() {
   const [scrolled, setScrolled] = useState(false);
@@ -118,47 +120,557 @@ function Ticker() {
   );
 }
 
-function Hero() {
+/* ─── OTP Input — campo de 7 dígitos para o código 2FA ─────────────────────── */
+function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const getInputs = () =>
+    containerRef.current
+      ? Array.from(containerRef.current.querySelectorAll<HTMLInputElement>("input"))
+      : [];
+
+  // Preenche 8 posições com os dígitos existentes (ou string vazia)
+  const digits = Array.from({ length: 8 }, (_, i) => value[i] ?? "");
+
+  function setDigit(i: number, d: string) {
+    const arr = Array.from({ length: 8 }, (_, j) => value[j] ?? "");
+    arr[i] = d;
+    onChange(arr.join(""));
+  }
+
+  function handleChange(i: number, raw: string) {
+    const digit = raw.replace(/\D/g, "").slice(-1);
+    if (raw.length > 0 && !digit) return; // ignora não-numéricos
+    setDigit(i, digit);
+    if (digit && i < 7) getInputs()[i + 1]?.focus();
+  }
+
+  function handleKeyDown(i: number, e: React.KeyboardEvent) {
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      if (digits[i]) {
+        setDigit(i, "");
+      } else if (i > 0) {
+        setDigit(i - 1, "");
+        getInputs()[i - 1]?.focus();
+      }
+    } else if (e.key === "ArrowLeft" && i > 0) {
+      getInputs()[i - 1]?.focus();
+    } else if (e.key === "ArrowRight" && i < 7) {
+      getInputs()[i + 1]?.focus();
+    }
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 8);
+    if (pasted) {
+      onChange(pasted);
+      getInputs()[Math.min(pasted.length, 7)]?.focus();
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="flex justify-center gap-2" onPaste={handlePaste}>
+      {digits.map((d, i) => (
+        <input
+          key={i}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={d}
+          autoFocus={i === 0}
+          onChange={e => handleChange(i, e.target.value)}
+          onKeyDown={e => handleKeyDown(i, e)}
+          onFocus={e => e.currentTarget.select()}
+          className="h-14 w-10 rounded-lg border border-border bg-muted/50 text-center font-mono text-xl font-bold text-ink outline-none transition-all focus:border-accent focus:bg-card focus:ring-2 focus:ring-accent/20"
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─── AuthCard — card multi-etapa (login / 2fa / register / forgot) ─────────── */
+type AuthStep = "login" | "2fa" | "register" | "forgot";
+
+function getErrorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as unknown;
+    if (typeof first === "string" && first.trim()) return first;
+    if (first && typeof first === "object" && "msg" in first) {
+      const msg = (first as { msg?: unknown }).msg;
+      if (typeof msg === "string" && msg.trim()) return msg;
+    }
+  }
+  if (detail && typeof detail === "object" && "msg" in detail) {
+    const msg = (detail as { msg?: unknown }).msg;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  return fallback;
+}
+
+function AuthCard() {
   const router = useRouter();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const [step, setStep] = useState<AuthStep>("login");
 
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLoginError(null);
-    setIsSubmitting(true);
+  // Campos compartilhados entre etapas
+  const [email,           setEmail]           = useState("");
+  const [password,        setPassword]        = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [twoFaCode,       setTwoFaCode]       = useState("");
 
+  // UI state
+  const [isSubmitting,     setIsSubmitting]     = useState(false);
+  const [error,            setError]            = useState<string | null>(null);
+  const [registerSuccess,  setRegisterSuccess]  = useState(false);
+  const [forgotSuccess,    setForgotSuccess]    = useState(false);
+  const [resendCooldown,   setResendCooldown]   = useState(0);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+  // Redireciona para o dashboard se já há token válido (não expirado)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail = typeof data?.detail === "string" ? data.detail : "Falha no login. Verifique usuário e senha.";
-        setLoginError(detail);
-        return;
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      if (payload.exp && payload.exp * 1000 > Date.now()) {
+        router.replace("/dashboard");
+      } else {
+        localStorage.removeItem("token"); // token expirado — limpa
       }
-
-      if (!data?.access_token) {
-        setLoginError("Resposta de login inválida. Tente novamente.");
-        return;
-      }
-
-      localStorage.setItem("token", data.access_token);
-      router.push("/dashboard");
     } catch {
-      setLoginError("Não foi possível conectar ao backend. Confirme se a API está ativa.");
+      localStorage.removeItem("token"); // token malformado — limpa
+    }
+  }, [router]);
+
+  // Countdown para reenvio do código 2FA
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  async function apiPost(path: string, body: unknown) {
+    const res = await fetch(`${apiUrl}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await res.json().catch((): Record<string, any> => ({}));
+    return { ok: res.ok, data };
+  }
+
+  async function prewarmProfileCache(token: string) {
+    try {
+      const res = await fetch(`${apiUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = await res.json().catch((): Record<string, any> => ({}));
+      const profile: UserProfile = {
+        email: typeof raw.email === "string" ? raw.email : "",
+        username: typeof raw.username === "string" ? raw.username : null,
+        nome_exibicao: typeof raw.nome_exibicao === "string" ? raw.nome_exibicao : null,
+        tipo_perfil: typeof raw.tipo_perfil === "string" ? raw.tipo_perfil : null,
+        empresa_nome: typeof raw.empresa_nome === "string" ? raw.empresa_nome : null,
+      };
+      if (profile.email) setCachedProfile(profile);
+    } catch {
+      // best-effort cache warmup
+    }
+  }
+
+  /* ── Login ──────────────────────────────────────────────────────────────── */
+  async function handleLogin(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const { ok, data } = await apiPost("/auth/login", { email, password });
+      if (!ok) {
+        setError(getErrorMessage(data?.detail, "Usuário ou senha incorretos."));
+        return;
+      }
+      if (data.access_token) {
+        localStorage.setItem("token", data.access_token);
+        void prewarmProfileCache(data.access_token);
+        router.replace("/dashboard");
+      } else {
+        // Backend atual envia OTP por email e a validação acontece na etapa 2FA.
+        setStep("2fa");
+        setTwoFaCode("");
+        setResendCooldown(60);
+      }
+    } catch {
+      setError("Não foi possível conectar ao servidor.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  /* ── Esqueceu a senha ───────────────────────────────────────────────────── */
+  async function handleForgotPassword(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const { ok, data } = await apiPost("/auth/forgot-password", { email });
+      if (!ok) {
+        setError(getErrorMessage(data?.detail, "Não foi possível enviar o link. Tente novamente."));
+        return;
+      }
+      setForgotSuccess(true);
+    } catch {
+      setError("Não foi possível conectar ao servidor.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  /* ── Verificar código 2FA ────────────────────────────────────────────────── */
+  async function handleVerify2FA(e: FormEvent) {
+    e.preventDefault();
+    const code = twoFaCode.replace(/\D/g, "");
+    if (code.length !== 8) { setError("Insira os 8 dígitos do código."); return; }
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const { ok, data } = await apiPost("/auth/verify", { email, token: code });
+      if (!ok) {
+        setError(getErrorMessage(data?.detail, "Código inválido ou expirado."));
+        return;
+      }
+      if (data.access_token) {
+        localStorage.setItem("token", data.access_token);
+        void prewarmProfileCache(data.access_token);
+        router.replace("/dashboard");
+      }
+    } catch {
+      setError("Erro ao verificar código.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  /* ── Reenviar código 2FA ─────────────────────────────────────────────────── */
+  async function handleResend2FA() {
+    if (resendCooldown > 0) return;
+    setError(null);
+    try {
+      await apiPost("/auth/login", { email, password });
+      setResendCooldown(60);
+    } catch {
+      setError("Erro ao reenviar código.");
+    }
+  }
+
+  /* ── Cadastro ────────────────────────────────────────────────────────────── */
+  async function handleRegister(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (password !== confirmPassword) {
+      setError("As senhas não coincidem.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("A senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const { ok, data } = await apiPost("/auth/register", {
+        email,
+        password,
+        tenant_id: "default",
+      });
+      if (!ok) {
+        setError(getErrorMessage(data?.detail, "Erro ao criar conta. Tente novamente."));
+        return;
+      }
+      setRegisterSuccess(true);
+    } catch {
+      setError("Não foi possível conectar ao servidor.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function goToLogin() {
+    setStep("login");
+    setError(null);
+    setPassword("");
+    setConfirmPassword("");
+    setTwoFaCode("");
+    setRegisterSuccess(false);
+    setForgotSuccess(false);
+  }
+
+  function goToRegister() {
+    setStep("register");
+    setError(null);
+    setPassword("");
+    setConfirmPassword("");
+  }
+
+  const btnPrimary =
+    "group mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-ink py-3.5 text-[13px] font-medium text-primary-foreground transition-all hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-60";
+
+  return (
+    <div className="relative rounded-2xl border border-border bg-card p-8 shadow-[0_30px_80px_-30px_color-mix(in_oklab,var(--ink)_25%,transparent)]">
+
+      {/* ── Etapa: Login ──────────────────────────────────────────────────── */}
+      {step === "login" && (
+        <>
+          <div className="mb-1 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-ink">Acessar plataforma</h3>
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-success">
+              <span className="h-1.5 w-1.5 rounded-full bg-success pulse-dot" /> online
+            </span>
+          </div>
+          <p className="mb-7 text-xs text-muted-foreground">Use o email da sua conta StockOps</p>
+
+          <form className="space-y-5" onSubmit={handleLogin}>
+            <Field
+              label="Email"
+              placeholder="voce@empresa.com"
+              value={email}
+              onChange={setEmail}
+              autoComplete="email"
+            />
+            <Field
+              label="Senha"
+              placeholder="••••••••••"
+              type="password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="current-password"
+            />
+
+            <button type="submit" disabled={isSubmitting} className={btnPrimary}>
+              {isSubmitting ? "Entrando..." : "Entrar na plataforma"}
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </button>
+
+            {error && <p className="text-xs text-danger">{error}</p>}
+          </form>
+
+          <div className="mt-7 flex items-center justify-between border-t border-border pt-5">
+            <button
+              onClick={goToRegister}
+              className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent transition-colors hover:text-accent/80"
+            >
+              Criar conta
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStep("forgot"); setError(null); setForgotSuccess(false); }}
+              className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground transition-colors hover:text-ink"
+            >
+              Esqueceu sua senha?
+            </button>
+          </div>
+
+          {/* Floating decoratives */}
+          <div className="absolute -right-4 -bottom-4 hidden rotate-3 rounded-lg border border-border bg-card px-3 py-2 shadow-lg lg:flex lg:items-center lg:gap-2">
+            <TrendingDown className="h-3.5 w-3.5 text-danger" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink">Ruptura · 3d</span>
+          </div>
+        </>
+      )}
+
+      {/* ── Etapa: 2FA ────────────────────────────────────────────────────── */}
+      {step === "2fa" && (
+        <>
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/15">
+              <KeyRound className="h-5 w-5 text-accent" />
+            </div>
+            <h3 className="text-lg font-semibold text-ink">Verificação em 2 etapas</h3>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Enviamos um código para{" "}
+              <span className="font-mono font-semibold text-ink">{email}</span>
+            </p>
+          </div>
+
+          <form className="space-y-6" onSubmit={handleVerify2FA}>
+            <OtpInput value={twoFaCode} onChange={setTwoFaCode} />
+
+            <button
+              type="submit"
+              disabled={isSubmitting || twoFaCode.replace(/\D/g, "").length !== 8}
+              className={btnPrimary}
+            >
+              {isSubmitting ? "Verificando..." : "Verificar código"}
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </button>
+
+            {error && <p className="text-center text-xs text-danger">{error}</p>}
+          </form>
+
+          <div className="mt-6 flex items-center justify-between border-t border-border pt-5 text-xs">
+            <button
+              onClick={goToLogin}
+              className="font-mono tracking-[0.12em] text-muted-foreground transition-colors hover:text-ink"
+            >
+              ← Voltar
+            </button>
+            <button
+              onClick={handleResend2FA}
+              disabled={resendCooldown > 0}
+              className="font-mono tracking-[0.12em] text-accent transition-colors hover:text-accent/80 disabled:cursor-not-allowed disabled:text-muted-foreground"
+            >
+              {resendCooldown > 0 ? `Reenviar em ${resendCooldown}s` : "Reenviar código"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Etapa: Cadastro ───────────────────────────────────────────────── */}
+      {step === "register" && (
+        <>
+          {registerSuccess ? (
+            /* Confirmação pós-cadastro */
+            <div className="py-6 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+                <Shield className="h-5 w-5 text-success" />
+              </div>
+              <h3 className="text-lg font-semibold text-ink">Quase lá!</h3>
+              <p className="mt-3 max-w-xs mx-auto text-sm text-muted-foreground">
+                Verifique seu email para confirmar o cadastro antes de acessar a plataforma.
+              </p>
+              <p className="mt-1 font-mono text-xs text-accent">{email}</p>
+              <button
+                onClick={goToLogin}
+                className="mt-8 font-mono text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:text-accent/80"
+              >
+                Ir para o login →
+              </button>
+            </div>
+          ) : (
+            /* Formulário de cadastro */
+            <>
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-ink">Criar conta</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Plataforma de gestão de estoque com IA
+                </p>
+              </div>
+
+              <form className="space-y-5" onSubmit={handleRegister}>
+                <Field
+                  label="Email"
+                  placeholder="voce@empresa.com"
+                  value={email}
+                  onChange={setEmail}
+                  autoComplete="email"
+                />
+                <Field
+                  label="Senha"
+                  placeholder="Mínimo 6 caracteres"
+                  type="password"
+                  value={password}
+                  onChange={setPassword}
+                  autoComplete="new-password"
+                />
+                <Field
+                  label="Confirmar senha"
+                  placeholder="••••••••••"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  autoComplete="new-password"
+                />
+
+                <button type="submit" disabled={isSubmitting} className={btnPrimary}>
+                  {isSubmitting ? "Criando conta..." : "Criar conta"}
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </button>
+
+                {error && <p className="text-xs text-danger">{error}</p>}
+              </form>
+
+              <div className="mt-6 border-t border-border pt-5">
+                <button
+                  onClick={goToLogin}
+                  className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground transition-colors hover:text-ink"
+                >
+                  ← Já tenho conta
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+      {/* ── Etapa: Esqueceu a senha ──────────────────────────────────────────── */}
+      {step === "forgot" && (
+        <>
+          {forgotSuccess ? (
+            <div className="py-6 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+                <Shield className="h-5 w-5 text-success" />
+              </div>
+              <h3 className="text-lg font-semibold text-ink">Verifique seu email</h3>
+              <p className="mt-3 max-w-xs mx-auto text-sm text-muted-foreground">
+                Enviamos um link para redefinir sua senha.
+              </p>
+              <p className="mt-1 font-mono text-xs text-accent">{email}</p>
+              <button
+                onClick={goToLogin}
+                className="mt-8 font-mono text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:text-accent/80"
+              >
+                Voltar ao login →
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-ink">Redefinir senha</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Informe seu email para receber o link de redefinição.
+                </p>
+              </div>
+
+              <form className="space-y-5" onSubmit={handleForgotPassword}>
+                <Field
+                  label="Email"
+                  placeholder="voce@empresa.com"
+                  value={email}
+                  onChange={setEmail}
+                  autoComplete="email"
+                />
+
+                <button type="submit" disabled={isSubmitting} className={btnPrimary}>
+                  {isSubmitting ? "Enviando..." : "Enviar link de redefinição"}
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </button>
+
+                {error && <p className="text-xs text-danger">{error}</p>}
+              </form>
+
+              <div className="mt-6 border-t border-border pt-5">
+                <button
+                  onClick={goToLogin}
+                  className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground transition-colors hover:text-ink"
+                >
+                  ← Voltar ao login
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+    </div>
+  );
+}
+
+/* ─── Hero ──────────────────────────────────────────────────────────────────── */
+function Hero() {
   return (
     <section id="acesso" className="relative overflow-hidden border-b border-border">
       <div className="grid-bg absolute inset-0 opacity-60" />
@@ -211,62 +723,10 @@ function Hero() {
           </div>
         </div>
 
+        {/* Auth card column */}
         <div className="relative lg:pt-4">
           <div className="absolute -inset-4 -z-10 rounded-3xl blur-2xl" style={{ background: "color-mix(in oklab, var(--amber-soft) 40%, transparent)" }} />
-
-          <div className="relative rounded-2xl border border-border bg-card p-8 shadow-[0_30px_80px_-30px_color-mix(in_oklab,var(--ink)_25%,transparent)]">
-            <div className="mb-1 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-ink">Acessar plataforma</h3>
-              <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-success pulse-dot" /> online
-              </span>
-            </div>
-            <p className="mb-7 text-xs text-muted-foreground">Credenciais fornecidas pelo administrador</p>
-
-            <form className="space-y-5" onSubmit={handleLogin}>
-              <Field
-                label="Usuário"
-                placeholder="seu.usuario"
-                value={username}
-                onChange={setUsername}
-                autoComplete="username"
-              />
-              <Field
-                label="Senha"
-                placeholder="••••••••••"
-                type="password"
-                value={password}
-                onChange={setPassword}
-                autoComplete="current-password"
-              />
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="group mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-ink py-3.5 text-[13px] font-medium text-primary-foreground transition-all hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting ? "Entrando..." : "Entrar na plataforma"}
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </button>
-
-              {loginError && <p className="text-xs text-danger">{loginError}</p>}
-            </form>
-
-            <div className="mt-7 flex items-center justify-between border-t border-border pt-5">
-              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Demo</span>
-              <div className="flex gap-2 font-mono text-[11px]">
-                <code className="rounded bg-muted px-2 py-1 text-ink">admin</code>
-                <span className="text-muted-foreground">/</span>
-                <code className="rounded bg-muted px-2 py-1 text-ink">admin123</code>
-              </div>
-            </div>
-
-            <div className="absolute -right-4 -bottom-4 hidden rotate-3 rounded-lg border border-border bg-card px-3 py-2 shadow-lg lg:flex lg:items-center lg:gap-2">
-              <TrendingDown className="h-3.5 w-3.5 text-danger" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink">Ruptura · 3d</span>
-            </div>
-          </div>
-
+          <AuthCard />
           <div className="absolute -left-6 top-4 hidden rotate-[-4deg] rounded-lg border border-border bg-card px-3 py-2 shadow-lg lg:flex lg:items-center lg:gap-2">
             <Activity className="h-3.5 w-3.5 text-accent" />
             <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink">Score 92</span>
@@ -277,6 +737,7 @@ function Hero() {
   );
 }
 
+/* ─── Field ─────────────────────────────────────────────────────────────────── */
 function Field({
   label,
   placeholder,
@@ -694,4 +1155,3 @@ export default function LandingPage() {
     </div>
   );
 }
-

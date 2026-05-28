@@ -36,11 +36,36 @@ class Token(BaseModel):
     token_type: str
 
 
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    username: Optional[str] = None
+    nome_exibicao: Optional[str] = None
+    tipo_perfil: str = "colaborador"
+    empresa_nome: Optional[str] = None
+    # tenant_id mantido por compatibilidade com clientes antigos — ignorado no registro
+    tenant_id: Optional[str] = None
+
+    @field_validator("email", "password")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Campo obrigatório")
+        return v
+
+    @field_validator("tipo_perfil")
+    @classmethod
+    def valid_tipo_perfil(cls, v: str) -> str:
+        if v not in ("empresa", "colaborador"):
+            raise ValueError("tipo_perfil deve ser 'empresa' ou 'colaborador'")
+        return v
+
+
 class UserLogin(BaseModel):
-    username: str
+    email: str
     password: str
 
-    @field_validator("username", "password")
+    @field_validator("email", "password")
     @classmethod
     def not_empty(cls, v: str) -> str:
         if not v.strip():
@@ -48,8 +73,32 @@ class UserLogin(BaseModel):
         return v
 
 
+class OTPVerify(BaseModel):
+    email: str
+    token: str
+
+    @field_validator("email", "token")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Campo obrigatório")
+        return v
+
+
+class ForgotPassword(BaseModel):
+    email: str
+
+
+class ProfileUpdate(BaseModel):
+    username: Optional[str] = None
+    nome_exibicao: Optional[str] = None
+    tipo_perfil: Optional[str] = None
+    empresa_nome: Optional[str] = None
+
+
 class AnalysisRecord(BaseModel):
     """Representa uma análise persistida no Supabase (resposta dos endpoints GET)."""
+
     id: str
     tenant_id: str
     user_id: str | None = None
@@ -119,3 +168,73 @@ class MovementCreate(BaseModel):
         if v not in ("entrada", "saida"):
             raise ValueError("tipo deve ser 'entrada' ou 'saida'")
         return v
+
+
+# ── Tenant management ────────────────────────────────────────
+
+
+class TenantResponse(BaseModel):
+    id: str
+    name: str
+    slug: str
+    plan: str
+
+
+class TenantMemberResponse(BaseModel):
+    id: str
+    email: str
+    username: Optional[str] = None
+    nome_exibicao: Optional[str] = None
+    role: str
+    tipo_perfil: Optional[str] = None
+
+
+class InviteCreate(BaseModel):
+    email: str
+    role: str = "viewer"
+
+    @field_validator("email")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Email obrigatório")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def valid_role(cls, v: str) -> str:
+        if v not in ("admin", "viewer"):
+            raise ValueError("role deve ser 'admin' ou 'viewer'")
+        return v
+
+
+class InviteAccept(BaseModel):
+    token: str
+
+    @field_validator("token")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Token obrigatório")
+        return v
+
+
+class JoinRequestCreate(BaseModel):
+    tenant_id: str
+    message: Optional[str] = None
+
+    @field_validator("tenant_id")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("tenant_id obrigatório")
+        return v
+
+
+class JoinRequestResponse(BaseModel):
+    id: str
+    tenant_id: str
+    user_id: str
+    status: str
+    message: Optional[str] = None
+    created_at: str

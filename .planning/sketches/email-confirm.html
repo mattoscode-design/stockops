@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Confirme seu email — StockOps</title></head>
+<body style="margin:0;padding:0;background-color:#f5f4f0;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f4f0;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+          <tr>
+            <td align="center" style="padding-bottom:28px;">
+              <table cellpadding="0" cellspacing="0"><tr>
+                <td style="background-color:#1a1a1a;border-radius:10px;padding:10px 14px;">
+                  <span style="font-size:13px;font-weight:700;color:#ffffff;letter-spacing:0.18em;text-transform:uppercase;">STOCKOPS</span>
+                </td>
+              </tr></table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color:#ffffff;border-radius:16px;border:1px solid #e8e5de;overflow:hidden;">
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:linear-gradient(135deg,#1a1a1a,#2e2e2e);padding:32px 40px 28px;">
+                    <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:0.12em;text-transform:uppercase;">Bem-vindo ao StockOps</p>
+                    <h1 style="margin:0;font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;line-height:1.2;">Confirme<br>seu email</h1>
+                  </td>
+                </tr>
+              </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding:36px 40px 40px;">
+
+                    <p style="margin:0 0 28px;font-size:15px;color:#555048;line-height:1.6;">
+                      Sua conta foi criada com sucesso. Clique no botão abaixo para confirmar seu endereço de email e ativar o acesso ao StockOps.
+                    </p>
+
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                      <tr>
+                        <td align="center">
+                          <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#c28b32;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:14px 36px;border-radius:8px;letter-spacing:0.04em;">Confirmar email</a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin:0 0 24px;font-size:13px;color:#888178;line-height:1.6;">
+                      Se o botão não funcionar, copie e cole o link abaixo no navegador:<br>
+                      <a href="{{ .ConfirmationURL }}" style="color:#c28b32;word-break:break-all;">{{ .ConfirmationURL }}</a>
+                    </p>
+
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+                      <tr><td style="border-top:1px solid #ebe8e1;"></td></tr>
+                    </table>
+
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="background-color:#faf8f4;border-radius:8px;padding:16px 18px;">
+                          <p style="margin:0;font-size:12px;color:#888178;line-height:1.6;">
+                            Não criou uma conta no StockOps? Ignore este email com segurança.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-top:24px;">
+              <p style="margin:0;font-size:12px;color:#aaa49c;">© 2026 StockOps · Inteligência de Estoque</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
