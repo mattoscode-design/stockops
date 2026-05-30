@@ -8,7 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 import os
 
 from middleware.rate_limit import limiter
-from routers import auth, analysis, chat, api_v1, inventory, analyses
+from routers import auth, analysis, chat, api_v1, inventory, analyses, inventories, tenants
 
 _CYAN  = "\033[96m"
 _AMBER = "\033[93m"
@@ -17,9 +17,9 @@ _DIM   = "\033[2m"
 _RESET = "\033[0m"
 
 def _print_docs():
-    print(f"\n{_AMBER}{'═' * 60}{_RESET}")
-    print(f"{_AMBER}  STOCKOPS API — v1.0.0{_RESET}")
-    print(f"{_AMBER}{'═' * 60}{_RESET}\n")
+    print(f"\n{_AMBER}{'=' * 60}{_RESET}")
+    print(f"{_AMBER}  STOCKOPS API - v1.0.0{_RESET}")
+    print(f"{_AMBER}{'=' * 60}{_RESET}\n")
 
     print(f"{_CYAN}  ROTAS DISPONÍVEIS{_RESET}")
     routes = [
@@ -66,10 +66,13 @@ def _print_docs():
     sec = ["JWT Auth", "Pydantic Validation", "Rate Limit 30/min", "CORS", "bcrypt", "SQLAlchemy ORM"]
     print(f"  {_DIM}" + "  ·  ".join(sec) + f"{_RESET}")
 
-    print(f"\n{_GREEN}  Docs interativos → http://localhost:8000/docs{_RESET}")
-    print(f"{_AMBER}{'═' * 60}{_RESET}\n")
+    print(f"\n{_GREEN}  Docs interativos -> http://localhost:8000/docs{_RESET}")
+    print(f"{_AMBER}{'=' * 60}{_RESET}\n")
 
-_print_docs()
+try:
+    _print_docs()
+except UnicodeEncodeError:
+    print("\n[StockOps API v1.0.0] Docs: http://localhost:8000/docs\n")
 
 app = FastAPI(title="StockOps API", version="1.0.0")
 
@@ -89,7 +92,9 @@ app.include_router(analysis.router)
 app.include_router(chat.router)
 app.include_router(api_v1.router)
 app.include_router(inventory.router)
+app.include_router(inventories.router)
 app.include_router(analyses.router)
+app.include_router(tenants.router)
 
 
 @app.get("/health")

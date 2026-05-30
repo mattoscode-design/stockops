@@ -6,7 +6,7 @@ Você é o **Arquiteto de Dados (Terminal 5)** do StockOps. Seu domínio exclusi
 
 ---
 
-## Estado Atual (2026-05-17) — CONCLUÍDO
+## Estado Atual (2026-05-21) — CONCLUÍDO
 
 - ✅ Migration `001_multi_tenant.sql` executada no Supabase
 - ✅ Migration `002_fix_analyses_schema.sql` executada no Supabase — schema alinhado com código
@@ -19,6 +19,18 @@ Você é o **Arquiteto de Dados (Terminal 5)** do StockOps. Seu domínio exclusi
 - ✅ `.env` com `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY` (formato `sb_secret_*`)
 - ✅ Conexão testada e validada — INSERT/DELETE OK, 62/62 testes passando
 - ✅ Bug B2 fechado: `save_analysis()` capturava PGRST204 silenciosamente — resolvido pela 002
+- ✅ Migration `003_add_validade.sql` executada — `data_validade DATE` nullable em `inventory_items`
+- ✅ Migration `004_add_ean_nome_inventory.sql` executada — `ean TEXT` e `nome TEXT` nullable em `inventory_items`
+- ✅ Migration `005_add_snapshot_updated_at_analyses.sql` executada — `items_snapshot JSONB` e `updated_at TIMESTAMPTZ` em `analyses` (trigger automático set_updated_at)
+- ✅ T4 avisado sobre 004 e 005 — aguardando atualização de models/schemas
+- ✅ Migration `006_add_inventories.sql` executada em produção — tabela `inventories` + `inventory_id` nullable em `inventory_items` + backfill tenant demo + RLS + índices
+- ✅ T4 avisado sobre 006 — aguardando atualização de models/schemas e código
+- ✅ Migration `007_supabase_auth_link.sql` executada em produção — `auth_id UUID` nullable em `public.users` + índice `idx_users_auth_id`
+- ✅ T4 avisado sobre 007 — aguardando integração do fluxo de auth
+- ✅ Migration `008_user_profile.sql` executada em produção — `nome_exibicao`, `tipo_perfil` (empresa|colaborador), `empresa_nome` em `public.users`
+- ✅ T4 avisado sobre 008 — aguardando atualização de model User e endpoint de perfil
+- ✅ Migration `009_users_supabase_auth_compat.sql` executada em produção — `username` e `password_hash` tornados nullable (Supabase Auth assumiu autenticação)
+- ✅ T4 avisado sobre 009
 
 **Causa raiz do banco vazio (B2):** O código Sprint 2 já usava os nomes corretos
 (`perda_total_estimada`, `resultados`, `relatorio`, `user_id` nullable). O banco estava
@@ -69,9 +81,10 @@ tenants (1)
 
 ```sql
 tenants            → id, name, slug, plan, created_at, active
-users              → id, tenant_id, username, password_hash, role, email, created_at, active
-analyses           → id, tenant_id, user_id (nullable), filename, total_skus, skus_criticos, perda_total_estimada, resultados (JSONB), relatorio (TEXT), created_at
-inventory_items    → id, tenant_id, sku, loja, categoria, estoque_atual, vendas_diarias, preco_medio, updated_at
+users              → id, tenant_id, username (nullable), password_hash (nullable), role, email, created_at, active, auth_id (UUID nullable → auth.users), nome_exibicao (VARCHAR nullable), tipo_perfil (VARCHAR DEFAULT 'colaborador'), empresa_nome (VARCHAR nullable)
+analyses           → id, tenant_id, user_id (nullable), filename, total_skus, skus_criticos, perda_total_estimada, resultados (JSONB), relatorio (TEXT), created_at, items_snapshot (JSONB nullable), updated_at (TIMESTAMPTZ)
+inventories        → id, tenant_id, name, description (nullable), created_at, active
+inventory_items    → id, tenant_id, inventory_id (UUID nullable → inventories), sku, loja, categoria, estoque_atual, vendas_diarias, preco_medio, updated_at, data_validade (DATE nullable), ean (TEXT nullable), nome (TEXT nullable)
 inventory_movements→ id, tenant_id, item_id, tipo (entrada|saida), quantidade, motivo, created_at
 ```
 
@@ -130,17 +143,22 @@ Usuário: admin | role=admin | senha=admin123
 
 ---
 
-## Próximas Migrations Previstas
+## Migrations — Estado Completo
 
-```
-003_delete_analyses.sql   ← se PO decidir pelo DELETE /analyses (botão "Limpar")
-                             T4 implementa o endpoint; T5 avalia impacto no schema
-                             Status: aguardando decisão PO (Q aberta)
-```
-
-> As migrations `002_analyses_persistence.sql` e `003_inventory_persistence.sql` previstas
-> anteriormente foram descartadas — a persistência foi implementada diretamente via
-> endpoints REST na Sprint 2 (sem necessidade de alteração de schema).
+| # | Arquivo | Descrição | Status |
+|---|---|---|---|
+| 001 | multi_tenant | Multi-tenant + RLS + seed demo | ✅ Produção |
+| 002 | fix_analyses_schema | Alinhamento colunas analyses | ✅ Produção |
+| 003 | add_validade | data_validade em inventory_items | ✅ Produção |
+| 004 | add_ean_nome_inventory | ean e nome em inventory_items | ✅ Produção |
+| 005 | add_snapshot_updated_at | items_snapshot e updated_at em analyses | ✅ Produção |
+| 006 | add_inventories | Tabela inventories + inventory_id | ✅ Produção |
+| 007 | supabase_auth_link | auth_id UUID em public.users | ✅ Produção |
+| 008 | user_profile | nome_exibicao, tipo_perfil, empresa_nome | ✅ Produção |
+| 009 | users_supabase_auth_compat | username e password_hash nullable | ✅ Produção |
+| 010 | bootstrap_demo_tenant_and_auth_profiles | Bootstrap tenant stockops-v1 + vínculo auth_id | ✅ Produção |
+| 011 | — | Benchmark entre tenants | ✅ Produção |
+| 012 | rls_users_tenants | RLS em public.users e public.tenants + deny anon | ✅ Produção |
 
 ---
 

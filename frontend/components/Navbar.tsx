@@ -1,17 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { clearCachedProfile } from "@/lib/api";
 
 interface Props {
   username: string;
   criticos?: number;
   onLogoClick?: () => void;
+  onProfileClick?: () => void;
+  actionsSlot?: React.ReactNode;
 }
 
-export default function Navbar({ username, criticos = 0, onLogoClick }: Props) {
+export default function Navbar({ username, criticos = 0, onLogoClick, onProfileClick, actionsSlot }: Props) {
   const router = useRouter();
 
   function logout() {
+    clearCachedProfile();
     localStorage.removeItem("token");
     router.push("/");
   }
@@ -25,25 +29,8 @@ export default function Navbar({ username, criticos = 0, onLogoClick }: Props) {
         {/* Logo + título */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <button
-            onClick={() => {
-              if (onLogoClick) {
-                onLogoClick();
-              } else {
-                router.push("/");
-              }
-            }}
-            style={{
-              fontFamily: "monospace",
-              fontSize: 13,
-              letterSpacing: "0.22em",
-              fontWeight: 800,
-              color: "var(--amber)",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-              transition: "opacity 0.2s",
-            }}
+            onClick={() => { if (onLogoClick) { onLogoClick(); } else { router.push("/"); } }}
+            style={{ fontFamily: "monospace", fontSize: 13, letterSpacing: "0.22em", fontWeight: 800, color: "var(--amber)", background: "none", border: "none", cursor: "pointer", padding: 0, transition: "opacity 0.2s" }}
             onMouseOver={e => (e.currentTarget.style.opacity = "0.8")}
             onMouseOut={e => (e.currentTarget.style.opacity = "1")}
             aria-label="Voltar para home"
@@ -51,9 +38,7 @@ export default function Navbar({ username, criticos = 0, onLogoClick }: Props) {
             STOCKOPS
           </button>
           <div style={{ width: 1, height: 16, background: "var(--border)" }} />
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>
-            Sistema de Inteligência Operacional
-          </span>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>Sistema de Inteligência Operacional</span>
         </div>
 
         {/* Centro — alerta de críticos */}
@@ -66,14 +51,23 @@ export default function Navbar({ username, criticos = 0, onLogoClick }: Props) {
           </div>
         )}
 
-        {/* Usuário + logout */}
+        {/* Usuário + ações + logout */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--amber)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {actionsSlot}
+
+          <button
+            onClick={onProfileClick}
+            disabled={!onProfileClick}
+            aria-label="Editar perfil"
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", padding: "4px 6px", borderRadius: 8, cursor: onProfileClick ? "pointer" : "default", transition: "background 0.15s" }}
+            onMouseOver={e => { if (onProfileClick) e.currentTarget.style.background = "var(--border, #E8E8EF)"; }}
+            onMouseOut={e => { e.currentTarget.style.background = "none"; }}
+          >
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--amber)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#0B0B0C" }}>{initial}</span>
             </div>
             <span style={{ fontSize: 13, color: "var(--text-2)" }}>{username}</span>
-          </div>
+          </button>
 
           <button onClick={logout} aria-label="Sair"
             className="btn-ghost btn-ghost-danger"

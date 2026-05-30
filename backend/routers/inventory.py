@@ -4,7 +4,7 @@ Todos os endpoints exigem JWT válido. tenant_id é extraído do token.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request, status
+from fastapi import APIRouter, HTTPException, Depends, Request, Query, status
 from middleware.auth import get_current_user
 from middleware.rate_limit import limiter
 from db.supabase_client import supabase
@@ -27,17 +27,18 @@ def _require_tenant(current_user: dict) -> str:
 
 @router.get("")
 @limiter.limit("30/minute")
-def list_inventory(request: Request, current_user: dict = Depends(get_current_user)):
-    """Lista todos os itens de estoque do tenant autenticado."""
+def list_inventory(
+    request: Request,
+    inventory_id: str | None = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Lista itens de estoque do tenant. Aceita ?inventory_id= para filtrar por inventário específico."""
     tenant_id = _require_tenant(current_user)
     try:
-        result = (
-            supabase.table("inventory_items")
-            .select("*")
-            .eq("tenant_id", tenant_id)
-            .order("sku")
-            .execute()
-        )
+        query = supabase.table("inventory_items").select("*").eq("tenant_id", tenant_id)
+        if inventory_id:
+            query = query.eq("inventory_id", inventory_id)
+        result = query.order("sku").execute()
         return result.data
     except Exception as e:
         logger.error(f"Erro ao listar inventário: {e}")

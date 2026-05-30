@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, Request, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, Request, HTTPException, Query
 from models.schemas import AnalysisSummary
 from middleware.auth import get_current_user
 from middleware.rate_limit import limiter
@@ -16,6 +16,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 async def upload_and_analyze(
     request: Request,
     file: UploadFile = File(...),
+    inventory_id: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
     filename = file.filename or ""
@@ -30,6 +31,6 @@ async def upload_and_analyze(
     # Persistência não-bloqueante: falha no save não interrompe a resposta
     tenant_id = current_user.get("tenant_id")
     if tenant_id:
-        save_analysis(summary, tenant_id, current_user.get("user_id"))
+        save_analysis(summary, tenant_id, current_user.get("user_id"), inventory_id=inventory_id)
 
     return summary

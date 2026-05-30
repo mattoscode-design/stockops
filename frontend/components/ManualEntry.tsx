@@ -3,10 +3,13 @@
 import { useState } from "react";
 import type { AnalysisResult } from "@/types/analysis";
 import { apiFetch } from "@/lib/api";
+import { addItem, loadInventory } from "@/lib/inventory";
+import { toast } from "@/components/Toast";
 
 interface StockRow {
   id: string;
   sku: string;
+  ean: string;
   loja: string;
   categoria: string;
   estoque_atual: string;
@@ -18,16 +21,16 @@ interface StockRow {
 function newRow(): StockRow {
   return {
     id: crypto.randomUUID(),
-    sku: "", loja: "", categoria: "",
+    sku: "", ean: "", loja: "", categoria: "",
     estoque_atual: "", vendas_diarias: "", preco_medio: "",
     promocao_planejada: "0",
   };
 }
 
 function rowsToCsv(rows: StockRow[]): string {
-  const header = "sku,loja,categoria,estoque_atual,vendas_diarias,preco_medio,promocao_planejada";
+  const header = "sku,ean,loja,categoria,estoque_atual,vendas_diarias,preco_medio,promocao_planejada";
   const lines = rows.map(r =>
-    [r.sku, r.loja, r.categoria, r.estoque_atual, r.vendas_diarias, r.preco_medio, r.promocao_planejada]
+    [r.sku, r.ean, r.loja, r.categoria, r.estoque_atual, r.vendas_diarias, r.preco_medio, r.promocao_planejada]
       .map(v => `"${v.replace(/"/g, '""')}"`)
       .join(",")
   );
@@ -35,9 +38,10 @@ function rowsToCsv(rows: StockRow[]): string {
 }
 
 const COLS = [
-  { key: "sku",                label: "Produto / SKU",    placeholder: "Ex: Energético 473ml", req: true,  width: 200, type: "text"   },
-  { key: "loja",               label: "Loja",             placeholder: "Ex: Loja SP-Norte",    req: true,  width: 160, type: "text"   },
-  { key: "categoria",          label: "Categoria",        placeholder: "Ex: Bebidas",           req: false, width: 130, type: "text"   },
+  { key: "sku",                label: "Produto / SKU",    placeholder: "Ex: Energético 473ml", req: true,  width: 190, type: "text"   },
+  { key: "ean",                label: "EAN",              placeholder: "7891234567890",         req: true,  width: 140, type: "text"   },
+  { key: "loja",               label: "Loja",             placeholder: "Ex: Loja SP-Norte",    req: true,  width: 150, type: "text"   },
+  { key: "categoria",          label: "Categoria",        placeholder: "Ex: Bebidas",           req: false, width: 120, type: "text"   },
   { key: "estoque_atual",      label: "Estoque",          placeholder: "0",                    req: true,  width: 90,  type: "number" },
   { key: "vendas_diarias",     label: "Vendas/dia",       placeholder: "0.0",                  req: true,  width: 100, type: "number" },
   { key: "preco_medio",        label: "Preço (R$)",       placeholder: "0.00",                 req: true,  width: 100, type: "number" },
@@ -78,11 +82,11 @@ export default function ManualEntry({ onResult, onLoading, loading }: Props) {
     });
   }
 
-  const validRows = rows.filter(r => r.sku.trim() && r.loja.trim() && r.estoque_atual && r.vendas_diarias && r.preco_medio);
+  const validRows = rows.filter(r => r.sku.trim() && r.ean.trim() && r.loja.trim() && r.estoque_atual && r.vendas_diarias && r.preco_medio);
 
   async function submit() {
     if (validRows.length === 0) {
-      setError("Preencha ao menos 1 linha com SKU, Loja, Estoque, Vendas/dia e Preço.");
+      setError("Preencha ao menos 1 linha com SKU, EAN, Loja, Estoque, Vendas/dia e Preço.");
       return;
     }
     setError("");
@@ -95,6 +99,24 @@ export default function ManualEntry({ onResult, onLoading, loading }: Props) {
       const res = await apiFetch("/analysis/upload", { method: "POST", body: fd });
       if (!res.ok) { const e = await res.json(); setError(e.detail ?? "Erro ao processar."); return; }
       onResult(await res.json());
+
+      // C1 — salvar itens no inventário via API (somente novos)
+      const existing = await loadInventory();
+      const existingKeys = new Set(existing.map(i => `${i.sku}::${i.loja}`));
+      const toAdd = validRows.filter(r => !existingKeys.has(`${r.sku}::${r.loja}`));
+      if (toAdd.length > 0) {
+        await Promise.all(toAdd.map(r => addItem({
+          sku: r.sku,
+          ean: r.ean || undefined,
+          loja: r.loja,
+          categoria: r.categoria || "Sem Categoria",
+          estoque_atual: Number(r.estoque_atual) || 0,
+          vendas_diarias: Number(r.vendas_diarias) || 0,
+          preco_medio: Number(r.preco_medio) || 0,
+          promocao_planejada: Number(r.promocao_planejada) || 0,
+        })));
+        toast(`${toAdd.length} produto${toAdd.length > 1 ? "s" : ""} adicionado${toAdd.length > 1 ? "s" : ""} ao inventário`, "success");
+      }
     } catch (e) {
       if (e instanceof Error && !e.message.includes("expirada")) setError("Erro ao conectar.");
     } finally {
@@ -141,7 +163,7 @@ export default function ManualEntry({ onResult, onLoading, loading }: Props) {
 
         {/* Linhas */}
         {rows.map((row, idx) => {
-          const isFilled = row.sku.trim() && row.loja.trim() && row.estoque_atual && row.vendas_diarias && row.preco_medio;
+          const isFilled = row.sku.trim() && row.ean.trim() && row.loja.trim() && row.estoque_atual && row.vendas_diarias && row.preco_medio;
           return (
             <div key={row.id}
               style={{
@@ -218,7 +240,7 @@ export default function ManualEntry({ onResult, onLoading, loading }: Props) {
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setRows([newRow(), newRow(), newRow()])}
+          <button onClick={() => { setRows([newRow(), newRow(), newRow()]); setError(""); }}
             className="btn-ghost" style={{ fontSize: 13, padding: "10px 18px", borderRadius: 9 }}>
             Limpar tudo
           </button>

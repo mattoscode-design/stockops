@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockOps — Variant B: Indigo Glow</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #06060f;
+    --bg-2: #0d0d1a;
+    --bg-3: #12121f;
+    --border: rgba(99,102,241,0.15);
+    --border-w: rgba(255,255,255,0.06);
+    --text: #ffffff;
+    --muted: #8b8ba8;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --accent-glow: rgba(99,102,241,0.2);
+    --success: #10b981;
+    --danger: #ef4444;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px; height: 68px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(6,6,15,0.9);
+    backdrop-filter: blur(16px);
+  }
+
+  .nav-logo {
+    font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .nav-logo-icon {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 900;
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+
+  .nav-links { display: flex; align-items: center; gap: 36px; list-style: none; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+
+  .nav-cta {
+    background: var(--accent);
+    color: white; border: none; padding: 10px 22px; border-radius: 6px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 0 24px rgba(99,102,241,0.35);
+    transition: box-shadow 0.2s, transform 0.15s;
+  }
+  .nav-cta:hover { box-shadow: 0 0 36px rgba(99,102,241,0.5); transform: translateY(-1px); }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 120px 48px 80px;
+    position: relative; overflow: hidden;
+  }
+
+  /* Grid background */
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(99,102,241,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,102,241,0.05) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%);
+  }
+
+  /* Glow orb */
+  .hero::after {
+    content: '';
+    position: absolute; top: -300px; left: 50%; transform: translateX(-50%);
+    width: 1000px; height: 800px;
+    background: radial-gradient(ellipse, rgba(99,102,241,0.18) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(99,102,241,0.1);
+    border: 1px solid rgba(99,102,241,0.3);
+    border-radius: 100px; padding: 6px 16px;
+    font-size: 12px; font-weight: 600; color: var(--accent-2);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 36px; position: relative; z-index: 1;
+  }
+
+  .hero-badge-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--success); animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+    50%       { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+  }
+
+  .hero h1 {
+    font-size: clamp(42px, 6.5vw, 84px);
+    font-weight: 900; line-height: 1.0; letter-spacing: -3px;
+    max-width: 880px; margin-bottom: 28px; position: relative; z-index: 1;
+  }
+
+  .hero h1 .accent-word {
+    color: transparent;
+    background: linear-gradient(135deg, var(--accent-2) 0%, #c084fc 100%);
+    -webkit-background-clip: text; background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 18px; color: var(--muted); font-weight: 400;
+    max-width: 560px; line-height: 1.7; margin-bottom: 48px;
+    position: relative; z-index: 1;
+  }
+
+  .hero-actions {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    position: relative; z-index: 1;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #818cf8);
+    color: white; border: none; padding: 14px 32px; border-radius: 8px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 32px rgba(99,102,241,0.4);
+    transition: transform 0.15s, box-shadow 0.2s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(99,102,241,0.5); }
+
+  .btn-ghost {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border-w); padding: 14px 32px; border-radius: 8px;
+    font-size: 15px; font-weight: 500; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .btn-ghost:hover { border-color: var(--border); background: rgba(99,102,241,0.05); }
+
+  /* ── CAROUSEL ── */
+  .carousel-section {
+    padding: 44px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden; position: relative;
+    background: var(--bg-2);
+  }
+
+  .carousel-section::before,
+  .carousel-section::after {
+    content: '';
+    position: absolute; top: 0; bottom: 0; width: 140px; z-index: 2;
+    pointer-events: none;
+  }
+  .carousel-section::before { left: 0;  background: linear-gradient(to right, var(--bg-2), transparent); }
+  .carousel-section::after  { right: 0; background: linear-gradient(to left, var(--bg-2), transparent); }
+
+  .carousel-track {
+    display: flex; gap: 56px; width: max-content;
+    animation: scroll 30s linear infinite;
+  }
+
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  .carousel-item {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap;
+  }
+
+  .carousel-icon {
+    width: 30px; height: 30px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    background: var(--bg-3); border: 1px solid var(--border);
+  }
+
+  /* ── METRICS ── */
+  .metrics-section {
+    max-width: 1200px; margin: 0 auto;
+    padding: 80px 48px;
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+
+  .metric-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 16px; padding: 36px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .metric-card:hover { border-color: rgba(99,102,241,0.4); background: var(--bg-3); }
+
+  .metric-number {
+    font-size: clamp(36px, 4vw, 56px);
+    font-weight: 900; letter-spacing: -2px;
+    background: linear-gradient(135deg, #fff 40%, var(--accent-2) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin-bottom: 10px;
+  }
+
+  .metric-label { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+  /* ── FEATURES ── */
+  .features-section { max-width: 1200px; margin: 0 auto; padding: 0 48px 80px; }
+
+  .section-label {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent-2); margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-size: clamp(30px, 3.5vw, 48px);
+    font-weight: 900; letter-spacing: -2px; line-height: 1.05; margin-bottom: 18px;
+  }
+
+  .section-sub { font-size: 16px; color: var(--muted); max-width: 500px; line-height: 1.7; margin-bottom: 56px; }
+
+  .features-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;
+  }
+
+  .feature-card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 16px; padding: 36px;
+    transition: border-color 0.25s, transform 0.2s;
+  }
+  .feature-card:hover { border-color: rgba(99,102,241,0.4); transform: translateY(-3px); }
+
+  .feature-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: var(--accent-glow); border: 1px solid rgba(99,102,241,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; margin-bottom: 22px;
+  }
+
+  .feature-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.3px; }
+  .feature-badge {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    background: rgba(99,102,241,0.15); color: var(--accent-2);
+    border-radius: 4px; padding: 2px 8px; margin-bottom: 14px; letter-spacing: 0.05em;
+  }
+  .feature-desc { font-size: 14px; color: var(--muted); line-height: 1.7; }
+
+  /* ── PIPELINE ── */
+  .pipeline-section {
+    background: var(--bg-2);
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    padding: 80px 48px;
+  }
+
+  .pipeline-inner { max-width: 1200px; margin: 0 auto; }
+
+  .pipeline-steps {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-top: 56px;
+  }
+
+  .pipeline-step {
+    background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px 24px; text-align: center;
+    position: relative; overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .pipeline-step:hover { border-color: rgba(99,102,241,0.4); }
+
+  .pipeline-step::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .pipeline-step:hover::before { opacity: 1; }
+
+  .step-num-badge {
+    display: inline-flex; width: 28px; height: 28px; border-radius: 8px;
+    background: var(--accent); align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; margin-bottom: 20px;
+  }
+
+  .step-icon { font-size: 28px; margin-bottom: 12px; }
+  .step-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .step-desc  { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  /* ── SCORE PREVIEW ── */
+  .score-section { max-width: 1200px; margin: 0 auto; padding: 80px 48px; }
+
+  .score-demo {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 40px; margin-top: 48px;
+    overflow: hidden;
+  }
+
+  .score-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 0; border-bottom: 1px solid var(--border-w);
+  }
+  .score-row:last-child { border-bottom: none; }
+
+  .score-sku { font-size: 14px; font-weight: 700; width: 140px; }
+  .score-loja { font-size: 12px; color: var(--muted); width: 100px; }
+
+  .score-bar-wrap { flex: 1; height: 6px; background: var(--bg-3); border-radius: 3px; overflow: hidden; }
+  .score-bar { height: 100%; border-radius: 3px; transition: width 1s ease; }
+
+  .score-val { font-size: 14px; font-weight: 800; width: 40px; text-align: right; }
+
+  .badge {
+    font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.06em; width: 130px; text-align: center;
+  }
+  .badge-urgente  { background: rgba(239,68,68,0.15);  color: #f87171; }
+  .badge-acao     { background: rgba(251,146,60,0.15); color: #fb923c; }
+  .badge-alerta   { background: rgba(234,179,8,0.15);  color: #facc15; }
+  .badge-monitor  { background: rgba(16,185,129,0.15); color: #34d399; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 48px; background: var(--bg);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .footer-logo {
+    font-size: 18px; font-weight: 800;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .footer-logo-icon {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 900;
+  }
+
+  .footer-copy { font-size: 13px; color: var(--muted); }
+  .footer-links { display: flex; gap: 28px; list-style: none; }
+  .footer-links a { font-size: 13px; color: var(--muted); text-decoration: none; }
+  .footer-links a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-icon">S</div>
+    StockOps
+  </div>
+  <ul class="nav-links">
+    <li><a href="#">Produto</a></li>
+    <li><a href="#">Casos de Uso</a></li>
+    <li><a href="#">Preços</a></li>
+    <li><a href="#">Blog</a></li>
+    <li><a href="#">Contato</a></li>
+  </ul>
+  <button class="nav-cta">Agendar Demo</button>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">
+    <span class="hero-badge-dot"></span>
+    IA Operacional · Distribuidoras
+  </div>
+  <h1>Prevenção de Ruptura com <span class="accent-word">Inteligência Artificial</span></h1>
+  <p class="hero-sub">
+    Transformamos as planilhas que você já usa em decisões de reabastecimento — antes que a perda aconteça. Para distribuidoras de 50 a 500 SKUs.
+  </p>
+  <div class="hero-actions">
+    <button class="btn-primary">Agendar Consulta Grátis</button>
+    <button class="btn-ghost">Ver Demo ao Vivo</button>
+  </div>
+</div>
+
+<!-- CAROUSEL -->
+<div class="carousel-section">
+  <div class="carousel-track">
+    <div class="carousel-item"><div class="carousel-icon">🐍</div>Python 3.12</div>
+    <div class="carousel-item"><div class="carousel-icon">⚡</div>FastAPI</div>
+    <div class="carousel-item"><div class="carousel-icon">▲</div>Next.js 16</div>
+    <div class="carousel-item"><div class="carousel-icon">✨</div>Gemini AI</div>
+    <div class="carousel-item"><div class="carousel-icon">🗄️</div>Supabase</div>
+    <div class="carousel-item"><div class="carousel-icon">🐼</div>Pandas</div>
+    <div class="carousel-item"><div class="carousel-icon">🤖</div>Scikit-learn</div>
+    <div class="carousel-item"><div class="carousel-icon">📊</div>Recharts</div>
+    <div class="carousel-item"><div class="carousel-icon">🔐</div>JWT Auth</div>
+    <div class="carousel-item"><div class="carousel-icon">☁️</div>Vercel + Render</div>
+    <!-- duplicado -->
+    <div class="carousel-item"><div class="carousel-icon">🐍</div>Python 3.12</div>
+    <div class="carousel-item"><div class="carousel-icon">⚡</div>FastAPI</div>
+    <div class="carousel-item"><div class="carousel-icon">▲</div>Next.js 16</div>
+    <div class="carousel-item"><div class="carousel-icon">✨</div>Gemini AI</div>
+    <div class="carousel-item"><div class="carousel-icon">🗄️</div>Supabase</div>
+    <div class="carousel-item"><div class="carousel-icon">🐼</div>Pandas</div>
+    <div class="carousel-item"><div class="carousel-icon">🤖</div>Scikit-learn</div>
+    <div class="carousel-item"><div class="carousel-icon">📊</div>Recharts</div>
+    <div class="carousel-item"><div class="carousel-icon">🔐</div>JWT Auth</div>
+    <div class="carousel-item"><div class="carousel-icon">☁️</div>Vercel + Render</div>
+  </div>
+</div>
+
+<!-- METRICS -->
+<div class="metrics-section">
+  <div class="metric-card">
+    <div class="metric-number">4–8%</div>
+    <div class="metric-label">do faturamento anual perdido por ruptura no varejo brasileiro</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-number">500+</div>
+    <div class="metric-label">SKUs suportados por análise com score individual 0–100</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-number">84</div>
+    <div class="metric-label">testes automatizados passando em produção continuamente</div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<div class="features-section">
+  <div class="section-label">Funcionalidades</div>
+  <div class="section-title">Tudo que você precisa para<br>nunca faltar produto</div>
+  <p class="section-sub">Do upload da planilha à decisão em segundos. Sem equipe de dados, sem complexidade.</p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">📈</div>
+      <div class="feature-badge">ML · Score 0–100</div>
+      <div class="feature-title">Score de Ruptura por SKU</div>
+      <div class="feature-desc">Cobertura (40%), tendência de vendas (30%), regularidade de abastecimento (20%) e sazonalidade (10%). Priorize com precisão.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔺</div>
+      <div class="feature-badge">Pareto · ABC</div>
+      <div class="feature-title">Curva ABC Automática</div>
+      <div class="feature-desc">Classificação por impacto financeiro estimado. Os 20% de SKUs responsáveis por 80% da perda potencial identificados instantaneamente.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧠</div>
+      <div class="feature-badge">Gemini Flash · IA</div>
+      <div class="feature-title">Relatório Executivo IA</div>
+      <div class="feature-desc">Gerado automaticamente em linguagem de negócio. Apresente ao time sem edição. Fallback estático garante disponibilidade 24/7.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💬</div>
+      <div class="feature-badge">Chatbot · Domínio restrito</div>
+      <div class="feature-title">Assistente Operacional</div>
+      <div class="feature-desc">Responde perguntas sobre SKUs críticos, cobertura e reposição. Restrito ao domínio de estoque — sem alucinações fora do contexto.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PIPELINE -->
+<div class="pipeline-section">
+  <div class="pipeline-inner">
+    <div class="section-label">Como Funciona</div>
+    <div class="section-title">De planilha a decisão em 4 passos</div>
+    <div class="pipeline-steps">
+      <div class="pipeline-step">
+        <div class="step-num-badge">1</div>
+        <div class="step-icon">📤</div>
+        <div class="step-title">Upload</div>
+        <div class="step-desc">Envie seu Excel ou CSV de sell-out e estoque. Sem formatação especial exigida.</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num-badge">2</div>
+        <div class="step-icon">⚙️</div>
+        <div class="step-title">Análise</div>
+        <div class="step-desc">Pipeline automático: cobertura, tendência, aceleração de vendas e impacto financeiro.</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num-badge">3</div>
+        <div class="step-icon">🎯</div>
+        <div class="step-title">Score</div>
+        <div class="step-desc">Score 0–100 por SKU. Urgente · Ação Recomendada · Alerta · Monitoramento.</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num-badge">4</div>
+        <div class="step-icon">✅</div>
+        <div class="step-title">Decisão</div>
+        <div class="step-desc">Relatório executivo + recomendação de reposição em linguagem de negócio.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCORE DEMO -->
+<div class="score-section">
+  <div class="section-label">Preview ao Vivo</div>
+  <div class="section-title">Score em tempo real</div>
+  <p class="section-sub">Veja como o sistema classifica cada produto no momento da análise.</p>
+  <div class="score-demo">
+    <div class="score-row">
+      <div class="score-sku">SKU-BEBIDA-001</div>
+      <div class="score-loja">Loja Centro</div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:92%; background: linear-gradient(90deg, #ef4444, #f87171);"></div></div>
+      <div class="score-val" style="color:#f87171">92</div>
+      <div class="badge badge-urgente">Urgente</div>
+    </div>
+    <div class="score-row">
+      <div class="score-sku">SKU-ALIM-034</div>
+      <div class="score-loja">Loja Norte</div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:78%; background: linear-gradient(90deg, #fb923c, #fbbf24);"></div></div>
+      <div class="score-val" style="color:#fb923c">78</div>
+      <div class="badge badge-acao">Ação Recomendada</div>
+    </div>
+    <div class="score-row">
+      <div class="score-sku">SKU-HIGIE-007</div>
+      <div class="score-loja">Loja Sul</div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:58%; background: linear-gradient(90deg, #eab308, #facc15);"></div></div>
+      <div class="score-val" style="color:#facc15">58</div>
+      <div class="badge badge-alerta">Alerta</div>
+    </div>
+    <div class="score-row">
+      <div class="score-sku">SKU-LIMP-019</div>
+      <div class="score-loja">Loja Leste</div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:28%; background: linear-gradient(90deg, #10b981, #34d399);"></div></div>
+      <div class="score-val" style="color:#34d399">28</div>
+      <div class="badge badge-monitor">Monitoramento</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">
+    <div class="footer-logo-icon">S</div>
+    StockOps
+  </div>
+  <ul class="footer-links">
+    <li><a href="#">Produto</a></li>
+    <li><a href="#">Privacidade</a></li>
+    <li><a href="#">Termos</a></li>
+    <li><a href="#">Contato</a></li>
+  </ul>
+  <div class="footer-copy">© 2026 StockOps. Todos os direitos reservados.</div>
+</footer>
+
+</body>
+</html>

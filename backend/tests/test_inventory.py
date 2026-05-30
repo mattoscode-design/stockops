@@ -66,6 +66,25 @@ class TestListInventory:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    def test_filtra_por_inventory_id(self, app_client):
+        """?inventory_id= adiciona .eq('inventory_id') à query."""
+        client, mock_sb = app_client
+        # Com filtro: select → eq(tenant) → eq(inventory_id) → order → execute
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(data=[MOCK_ITEM])
+
+        resp = client.get("/inventory?inventory_id=inv-001")
+        assert resp.status_code == 200
+        assert resp.json() == [MOCK_ITEM]
+
+    def test_sem_inventory_id_retorna_todos(self, app_client):
+        """Sem ?inventory_id=, retorna todos os itens do tenant."""
+        client, mock_sb = app_client
+        mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(data=[MOCK_ITEM])
+
+        resp = client.get("/inventory")
+        assert resp.status_code == 200
+        assert resp.json() == [MOCK_ITEM]
+
 
 # ────────────────────────────────────────────────────────────
 # POST /inventory

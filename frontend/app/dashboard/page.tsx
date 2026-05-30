@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutDashboard, ListOrdered, FileText, Package, ArrowUpFromLine, Plus } from "lucide-react";
+import { LayoutDashboard, ListOrdered, FileText, Package, ArrowUpFromLine, Plus, Users } from "lucide-react";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import UploadZone from "@/components/UploadZone";
@@ -10,18 +10,21 @@ import ManualEntry from "@/components/ManualEntry";
 import SummaryCards from "@/components/SummaryCards";
 import RiskTable from "@/components/RiskTable";
 import HistoryPanel from "@/components/HistoryPanel";
-import ReportSection from "@/components/ReportSection";
 import ChatBot from "@/components/ChatBot";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/EmptyState";
-import { SkeletonCharts, SkeletonTable } from "@/components/SkeletonLoader";
+import { SkeletonCard, SkeletonCharts } from "@/components/SkeletonLoader";
 import ScoreHistory from "@/components/ScoreHistory";
-import InventoryManager, { useImportToInventory } from "@/components/InventoryManager";
-import { importFromAnalysis, loadInventory } from "@/lib/inventory";
+import AnalysisTimeline from "@/components/AnalysisTimeline";
+import { loadInventory } from "@/lib/inventory";
 import { ToastContainer } from "@/components/Toast";
-import type { AnalysisResult, HistoryEntry } from "@/types/analysis";
+import type { AnalysisResult, HistoryEntry, AnalysisRecord } from "@/types/analysis";
 import { saveToHistory, loadHistory, clearHistory, removeFromHistory } from "@/lib/history";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getAnalysisCurrent, getMe, getAnalysesHistory, getCachedProfile, setCachedProfile } from "@/lib/api";
+import { exportRelatorioPDF } from "@/lib/pdf";
+import type { UserProfile } from "@/lib/api";
+import ProfileModal from "@/components/ProfileModal";
+import NotificationBell from "@/components/NotificationBell";
 
 /* Lazy load pesado do recharts */
 const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), {
@@ -29,7 +32,37 @@ const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), {
   loading: () => <SkeletonCharts />,
 });
 
-type Tab = "painel" | "ranking" | "relatorio" | "estoque" | "importar" | "manual";
+/* Lazy load de tabs pesadas */
+const ReportSection = dynamic(() => import("@/components/ReportSection"), {
+  ssr: false,
+  loading: () => <SkeletonCard height={300} />,
+});
+const InventoryManager = dynamic(() => import("@/components/InventoryManager"), {
+  ssr: false,
+  loading: () => <SkeletonCard height={300} />,
+});
+const EquipeTab = dynamic(() => import("@/components/EquipeTab"), {
+  ssr: false,
+  loading: () => <SkeletonCard height={300} />,
+});
+
+type Tab = "painel" | "ranking" | "relatorio" | "estoque" | "importar" | "manual" | "equipe";
+
+function resolveDisplayName(profile: UserProfile | null, emailFallback?: string | null): string {
+  const empresa = profile?.empresa_nome?.trim();
+  if (empresa) return empresa;
+
+  const nomeExibicao = profile?.nome_exibicao?.trim();
+  if (nomeExibicao) return nomeExibicao;
+
+  const username = profile?.username?.trim();
+  if (username) return username;
+
+  const email = (emailFallback ?? profile?.email ?? "").trim();
+  if (email.includes("@")) return email.split("@")[0];
+
+  return "...";
+}
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -60,6 +93,7 @@ const TAB_CONFIG: Record<Tab, { label: string; Icon: TabIcon }> = {
   estoque:   { label: "Estoque",      Icon: Package },
   importar:  { label: "Importar",     Icon: ArrowUpFromLine },
   manual:    { label: "Cadastrar",    Icon: Plus },
+  equipe:    { label: "Equipe",       Icon: Users },
 };
 
 function DashboardInner() {
@@ -69,11 +103,19 @@ function DashboardInner() {
   const [result,   setResult]   = useState<AnalysisResult | null>(null);
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [isDemo,   setIsDemo]   = useState(false);
-  const [invCriticos, setInvCriticos] = useState(0);
+  const [invItems, setInvItems] = useState<import("@/lib/inventory").InventoryItem[]>([]);
   const [loading,  setLoading]  = useState(false);
-  const [username, setUsername] = useState("Admin");
+  const [booting,  setBooting]  = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>([]);
+  const [username, setUsername] = useState<string>("...");
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [highlightSku, setHighlightSku] = useState<string | null>(null);
+  const [showProfileModal,  setShowProfileModal]  = useState(false);
+  const [showOnboarding,    setShowOnboarding]    = useState(false);
   const [history,  setHistory]  = useState<HistoryEntry[]>([]);
   const [tab,      setTabState] = useState<Tab>((params.get("tab") as Tab) ?? "painel");
+  const [inventorySnapshot, setInventorySnapshot] = useState<HistoryEntry["items_snapshot"] | undefined>(undefined);
 
   const setTab = useCallback((t: Tab) => {
     setTabState(t);
@@ -83,46 +125,86 @@ function DashboardInner() {
   }, [router]);
 
   useEffect(() => {
+    const cachedProfile = getCachedProfile();
+    if (cachedProfile) {
+      setUserProfile(cachedProfile);
+      setUsername(resolveDisplayName(cachedProfile));
+    }
+
     const token = localStorage.getItem("token");
-    if (!token) { router.push("/"); return; }
+    if (!token) { window.location.replace("/"); return; }
     try {
       const p = JSON.parse(atob(token.split(".")[1]));
-      setUsername(p.sub ?? "Admin");
-    } catch { /* mantém Admin */ }
+      if (p.exp && p.exp * 1000 < Date.now()) {
+        localStorage.removeItem("token");
+        window.location.replace("/");
+        return;
+      }
+    } catch {
+      localStorage.removeItem("token");
+      window.location.replace("/");
+      return;
+    }
 
-    const hist = loadHistory();
-    setHistory(hist);
+    const localHistory = loadHistory();
+    setHistory(localHistory);
+
+    // Boot paralelo: perfil + inventário + histórico de análises em Promise.all
+    Promise.all([
+      getMe(),
+      loadInventory(),
+      getAnalysesHistory(),
+    ]).then(([profile, items, records]) => {
+      setBooting(false);
+      if (!profile) {
+        // Token inválido/expirado — localStorage já foi limpo por getMe
+        window.location.replace("/");
+        return;
+      }
+      setCachedProfile(profile);
+      setUserProfile(profile);
+      setUsername(resolveDisplayName(profile));
+      setInvItems(items);
+      setAnalysisRecords(records);
+      if (!profile.nome_exibicao || !profile.username) {
+        setShowOnboarding(true);
+      }
+    }).catch(() => { setBooting(false); });
   }, [router]);
 
-  // Carrega contador de itens críticos do inventário após mount (evita hydration mismatch)
-  useEffect(() => {
-    loadInventory().then(items => {
-      setInvCriticos(
-        items.filter(i => i.vendas_diarias > 0 && (i.estoque_atual / i.vendas_diarias) < 3).length
-      );
-    });
-  }, []);
-
-  function handleResult(data: AnalysisResult) {
+  async function handleResult(data: AnalysisResult) {
     setResult(data);
     setCurrentEntryId(null);
     setIsDemo(false);
-    const entry = saveToHistory(data);
+    setInventorySnapshot(undefined);
+    // C4 — captura snapshot do inventário no momento da análise
+    const invItems = await loadInventory();
+    const snapshot = invItems.length > 0
+      ? invItems.map(i => ({ sku: i.sku, nome: i.nome, ean: i.ean, loja: i.loja, categoria: i.categoria, estoque_atual: i.estoque_atual, vendas_diarias: i.vendas_diarias, preco_medio: i.preco_medio }))
+      : undefined;
+    const entry = saveToHistory(data, snapshot);
     setHistory(prev => [entry, ...prev].slice(0, 10));
     setTab("painel");
   }
 
-  function exportPDF() {
-    document.title = `StockOps — Relatório ${new Date().toLocaleDateString("pt-BR")}`;
-    window.print();
-    setTimeout(() => { document.title = "StockOps — IA Operacional"; }, 1000);
+  async function exportPDF() {
+    if (pdfLoading) return;
+    setPdfLoading(true);
+    try {
+      await exportRelatorioPDF(username);
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   const criticos = result?.resultados.filter(r => r.score_ruptura >= 71).length ?? 0;
   const topSku   = result?.resultados[0]?.sku;
-  const tabs: Tab[] = result
-    ? ["painel","ranking","relatorio","estoque","importar","manual"]
-    : ["estoque","importar","manual"];
+  const isAdmin  = userProfile?.tipo_perfil === "empresa";
+  const tabs: Tab[] = [
+    ...(result ? (["painel","ranking","relatorio"] as Tab[]) : []),
+    "estoque", "importar", "manual",
+    ...(isAdmin ? (["equipe"] as Tab[]) : []),
+  ];
 
   const CARD: React.CSSProperties = {
     background: "#fff", border: "1px solid #E8E8EF", borderRadius: 16,
@@ -142,6 +224,13 @@ function DashboardInner() {
             setResult(null);
             setTab("painel");
           }}
+          onProfileClick={() => setShowProfileModal(true)}
+          actionsSlot={
+            <NotificationBell
+              result={result}
+              onStockAlertClick={sku => { setHighlightSku(sku); setTab("estoque"); }}
+            />
+          }
         />
 
         {/* Banner demo */}
@@ -179,9 +268,9 @@ function DashboardInner() {
                       {criticos}
                     </span>
                   )}
-                  {t === "estoque" && invCriticos > 0 && (
+                  {t === "estoque" && invItems.length > 0 && (
                     <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-amber-soft px-1.5 font-mono text-[10px] font-semibold text-ink">
-                      {invCriticos}
+                      {invItems.length}
                     </span>
                   )}
                   {isActive && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-accent" />}
@@ -192,13 +281,22 @@ function DashboardInner() {
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {result && !isDemo && (
-              <button onClick={exportPDF} className="btn-ghost no-print" style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, display: "flex", alignItems: "center", gap: 5 }}>
-                ↓ Exportar PDF
+              <button onClick={exportPDF} disabled={pdfLoading} className="btn-ghost no-print" style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, display: "flex", alignItems: "center", gap: 5, opacity: pdfLoading ? 0.6 : 1 }}>
+                {pdfLoading ? "Gerando..." : "↓ Exportar PDF"}
               </button>
             )}
             <HistoryPanel
               entries={history}
-              onSelect={entry => { setResult(entry.result); setCurrentEntryId(entry.id); setIsDemo(false); setTab("painel"); }}
+              onSelect={async entry => {
+                // Resposta imediata — carrega resultado do localStorage
+                setResult(entry.result);
+                setCurrentEntryId(entry.id);
+                setIsDemo(false);
+                setTab("painel");
+                // C4 — fonte primária: Supabase; fallback: cache localStorage
+                const apiSnapshot = await getAnalysisCurrent();
+                setInventorySnapshot(apiSnapshot ?? entry.items_snapshot);
+              }}
               onClear={async () => {
                 try { await apiFetch("/analyses", { method: "DELETE" }); } catch { /* offline */ }
                 clearHistory();
@@ -256,6 +354,12 @@ function DashboardInner() {
               </ErrorBoundary>
             )}
 
+            {analysisRecords.length >= 2 && !isDemo && (
+              <ErrorBoundary label="Linha do Tempo de Análises">
+                <AnalysisTimeline records={analysisRecords} />
+              </ErrorBoundary>
+            )}
+
             <ErrorBoundary label="Gráficos">
               <DashboardCharts result={result} receitaPotencial={result.receita_potencial_total} />
             </ErrorBoundary>
@@ -274,7 +378,12 @@ function DashboardInner() {
         )}
 
         {/* ── PAINEL VAZIO ────────────────────────────────── */}
-        {tab === "painel" && !result && (
+        {tab === "painel" && !result && booting && (
+          <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px 60px" }}>
+            <SkeletonCharts />
+          </div>
+        )}
+        {tab === "painel" && !result && !booting && (
           <EmptyState
             onImportClick={() => setTab("importar")}
             onManualClick={() => setTab("manual")}
@@ -293,7 +402,7 @@ function DashboardInner() {
         {tab === "relatorio" && result && (
           <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px 60px" }}>
             <PageHeader eyebrow="Gerado por Gemini Flash" title="Relatório Executivo" subtitle="Análise completa em linguagem de negócio"
-              right={<button onClick={exportPDF} className="btn-ghost no-print" style={{ fontSize: 13, padding: "10px 18px", borderRadius: 9, display: "flex", alignItems: "center", gap: 6 }}>↓ Exportar PDF</button>}
+              right={<button onClick={exportPDF} disabled={pdfLoading} className="btn-ghost no-print" style={{ fontSize: 13, padding: "10px 18px", borderRadius: 9, display: "flex", alignItems: "center", gap: 6, opacity: pdfLoading ? 0.6 : 1 }}>{pdfLoading ? "Gerando..." : "↓ Exportar PDF"}</button>}
             />
             <ErrorBoundary label="Relatório">
               <ReportSection relatorio={result.relatorio ?? "Relatório não disponível."} />
@@ -312,11 +421,22 @@ function DashboardInner() {
         {/* ── ESTOQUE (CRUD) ────────────────────────────────── */}
         {tab === "estoque" && (
           <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px 60px" }}>
+            {highlightSku && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "color-mix(in oklab, var(--amber,#E6A817) 10%, transparent)", border: "1px solid color-mix(in oklab, var(--amber,#E6A817) 30%, transparent)" }}>
+                <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>
+                  Atenção: <strong>{highlightSku}</strong> está com score de ruptura crítico.
+                </span>
+                <button onClick={() => setHighlightSku(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex" }}>✕</button>
+              </div>
+            )}
             <PageHeader eyebrow="Gestão de Estoque" title="Inventário" subtitle="Cadastro, ajustes e análise de itens em estoque" />
             <InventoryManager
               onAnalyze={data => { handleResult(data); setTab("painel"); }}
               onLoading={setLoading}
               loading={loading}
+              snapshot={inventorySnapshot}
+              onClearSnapshot={() => setInventorySnapshot(undefined)}
+              onItemsChange={setInvItems}
             />
           </div>
         )}
@@ -328,10 +448,45 @@ function DashboardInner() {
             <ManualEntry onResult={handleResult} onLoading={setLoading} loading={loading} />
           </div>
         )}
+
+        {/* ── EQUIPE (admin only) ───────────────────────────── */}
+        {tab === "equipe" && isAdmin && (
+          <div>
+            <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px 8px" }}>
+              <PageHeader eyebrow="Gestão de Equipe" title="Equipe" subtitle="Membros, solicitações de entrada e convites" />
+            </div>
+            <EquipeTab />
+          </div>
+        )}
       </div>
 
-      {result && <ChatBot result={result} />}
       <ToastContainer />
+
+      {/* Modal de onboarding — exibido na primeira vez, sem fechar até salvar */}
+      {showOnboarding && userProfile && (
+        <ProfileModal
+          profile={userProfile}
+          isOnboarding
+          onSaved={updated => {
+            setUserProfile(updated);
+            setUsername(resolveDisplayName(updated));
+            setShowOnboarding(false);
+          }}
+        />
+      )}
+
+      {/* Modal de edição de perfil — aberto pelo avatar na Navbar */}
+      {showProfileModal && userProfile && (
+        <ProfileModal
+          profile={userProfile}
+          onSaved={updated => {
+            setUserProfile(updated);
+            setUsername(resolveDisplayName(updated));
+            setShowProfileModal(false);
+          }}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
     </div>
   );
 }

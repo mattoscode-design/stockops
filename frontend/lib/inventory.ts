@@ -5,6 +5,8 @@ const KEY = "stockops_inventory";
 export interface InventoryItem {
   id: string;
   sku: string;
+  nome?: string;
+  ean?: string;
   loja: string;
   categoria: string;
   estoque_atual: number;
@@ -47,6 +49,8 @@ function mapApiItem(raw: Record<string, any>): InventoryItem {
   return {
     id: String(raw.id),
     sku: String(raw.sku ?? ""),
+    nome: raw.nome ? String(raw.nome) : undefined,
+    ean: raw.ean ? String(raw.ean) : undefined,
     loja: String(raw.loja ?? ""),
     categoria: String(raw.categoria ?? "Sem Categoria"),
     estoque_atual: Number(raw.estoque_atual ?? 0),
@@ -75,9 +79,10 @@ function mapApiMovement(raw: Record<string, any>): Movimento {
 
 // ── API-first functions com fallback localStorage ─────────────────────────────
 
-export async function loadInventory(): Promise<InventoryItem[]> {
+export async function loadInventory(inventoryId?: string): Promise<InventoryItem[]> {
   try {
-    const res = await apiFetch("/inventory");
+    const path = inventoryId ? `/inventory?inventory_id=${inventoryId}` : "/inventory";
+    const res = await apiFetch(path);
     if (res.ok) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await res.json() as Record<string, any>[];
@@ -111,6 +116,8 @@ export async function addItem(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sku: item.sku,
+        nome: item.nome ?? null,
+        ean: item.ean ?? null,
         loja: item.loja,
         categoria: item.categoria,
         estoque_atual: item.estoque_atual,
@@ -146,6 +153,8 @@ export async function updateItem(
   try {
     const body: Record<string, unknown> = {};
     if (changes.sku !== undefined) body.sku = changes.sku;
+    if (changes.nome !== undefined) body.nome = changes.nome;
+    if (changes.ean !== undefined) body.ean = changes.ean;
     if (changes.loja !== undefined) body.loja = changes.loja;
     if (changes.categoria !== undefined) body.categoria = changes.categoria;
     if (changes.estoque_atual !== undefined) body.estoque_atual = changes.estoque_atual;
@@ -173,14 +182,11 @@ export async function adjustStock(
   id: string,
   tipo: "entrada" | "saida",
   quantidade: number,
+  currentStock: number,
   obs = ""
 ): Promise<void> {
-  const items = lsLoad();
-  const item = items.find(i => i.id === id);
-  if (!item) return;
-
   const delta = tipo === "entrada" ? quantidade : -quantidade;
-  const novo_estoque = Math.max(0, item.estoque_atual + delta);
+  const novo_estoque = Math.max(0, currentStock + delta);
 
   try {
     await apiFetch(`/inventory/${id}/movement`, {
@@ -202,7 +208,7 @@ export async function adjustStock(
     quantidade,
     obs,
   };
-  lsSave(items.map(i => {
+  lsSave(lsLoad().map(i => {
     if (i.id !== id) return i;
     const movimentos = [...i.movimentos, movimento].slice(-50);
     return { ...i, estoque_atual: novo_estoque, ultima_atualizacao: now(), movimentos };
@@ -216,6 +222,15 @@ export async function deleteItem(id: string): Promise<void> {
   lsSave(lsLoad().filter(i => i.id !== id));
 }
 
+export async function clearInventory(itemIds: string[]): Promise<void> {
+  for (const id of itemIds) {
+    try {
+      await apiFetch(`/inventory/${id}`, { method: "DELETE" });
+    } catch { /* best effort */ }
+  }
+  localStorage.removeItem(KEY);
+}
+
 export async function importFromAnalysis(
   rows: {
     sku: string;
@@ -226,7 +241,8 @@ export async function importFromAnalysis(
     quantidade_recomendada: number;
   }[]
 ): Promise<void> {
-  const existing = lsLoad();
+  // Usa API-first para verificar duplicatas — não depende do localStorage
+  const existing = await loadInventory();
   const existingKeys = new Set(existing.map(i => `${i.sku}::${i.loja}`));
 
   for (const r of rows) {
@@ -246,8 +262,4 @@ export async function importFromAnalysis(
       existingKeys.add(k);
     }
   }
-}
-
-export function clearInventory(): void {
-  localStorage.removeItem(KEY);
 }
