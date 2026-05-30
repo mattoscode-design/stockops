@@ -17,6 +17,7 @@ from models.schemas import (
     OTPVerify,
     Token,
     ForgotPassword,
+    ResetPassword,
     ProfileUpdate,
 )
 from middleware.auth import oauth2_scheme, get_current_user
@@ -294,6 +295,31 @@ def forgot_password(request: Request, data: ForgotPassword):
     except Exception as e:
         logger.warning(f"Erro ao enviar reset de senha para {data.email}: {e}")
     return {"message": "Email de redefinição enviado"}
+
+
+@router.post("/reset-password", status_code=200)
+@limiter.limit("5/minute")
+def reset_password(request: Request, data: ResetPassword):
+    """
+    Conclui o fluxo de redefinição de senha.
+    access_token vem do hash da URL de callback do Supabase (type=recovery).
+    Não exige Bearer JWT no header — o access_token do recovery IS a autenticação.
+
+    Rate limit: 5/minute por IP.
+    """
+    try:
+        # 1. Verifica o token e obtém o user_id
+        user_response = supabase_auth.auth.get_user(data.access_token)
+        user_id = user_response.user.id
+        # 2. Atualiza a senha via admin (service_role obrigatório)
+        supabase.auth.admin.update_user_by_id(
+            user_id, {"password": data.new_password}
+        )
+        logger.info(f"Senha redefinida para user {user_id}")
+        return {"message": "Senha redefinida com sucesso"}
+    except Exception as e:
+        logger.warning(f"Erro ao redefinir senha: {e}")
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado")
 
 
 @router.post("/logout", status_code=204)

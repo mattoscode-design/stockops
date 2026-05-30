@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class AnalysisResponse(BaseModel):
@@ -87,6 +87,11 @@ class OTPVerify(BaseModel):
 
 class ForgotPassword(BaseModel):
     email: str
+
+
+class ResetPassword(BaseModel):
+    access_token: str
+    new_password: str = Field(min_length=6)
 
 
 class ProfileUpdate(BaseModel):
