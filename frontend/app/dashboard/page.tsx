@@ -15,13 +15,20 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/EmptyState";
 import { SkeletonCard, SkeletonCharts } from "@/components/SkeletonLoader";
 import ScoreHistory from "@/components/ScoreHistory";
+<<<<<<< HEAD
 import AnalysisTimeline from "@/components/AnalysisTimeline";
+=======
+>>>>>>> 801053e (perf: Promise.all boot, lazy tabs (InventoryManager/EquipeTab/ReportSection), skeleton on painel)
 import { loadInventory } from "@/lib/inventory";
 import { ToastContainer } from "@/components/Toast";
 import type { AnalysisResult, HistoryEntry, AnalysisRecord } from "@/types/analysis";
 import { saveToHistory, loadHistory, clearHistory, removeFromHistory } from "@/lib/history";
+<<<<<<< HEAD
 import { apiFetch, getAnalysisCurrent, getMe, getAnalysesHistory, getCachedProfile, setCachedProfile } from "@/lib/api";
 import { exportRelatorioPDF } from "@/lib/pdf";
+=======
+import { apiFetch, getAnalysisCurrent, getMe, getCachedProfile, setCachedProfile } from "@/lib/api";
+>>>>>>> 801053e (perf: Promise.all boot, lazy tabs (InventoryManager/EquipeTab/ReportSection), skeleton on painel)
 import type { UserProfile } from "@/lib/api";
 import ProfileModal from "@/components/ProfileModal";
 import NotificationBell from "@/components/NotificationBell";
@@ -106,8 +113,11 @@ function DashboardInner() {
   const [invItems, setInvItems] = useState<import("@/lib/inventory").InventoryItem[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [booting,  setBooting]  = useState(true);
+<<<<<<< HEAD
   const [pdfLoading, setPdfLoading] = useState(false);
   const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>([]);
+=======
+>>>>>>> 801053e (perf: Promise.all boot, lazy tabs (InventoryManager/EquipeTab/ReportSection), skeleton on painel)
   const [username, setUsername] = useState<string>("...");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [highlightSku, setHighlightSku] = useState<string | null>(null);
@@ -149,12 +159,20 @@ function DashboardInner() {
     const localHistory = loadHistory();
     setHistory(localHistory);
 
+<<<<<<< HEAD
     // Boot paralelo: perfil + inventário + histórico de análises em Promise.all
     Promise.all([
       getMe(),
       loadInventory(),
       getAnalysesHistory(),
     ]).then(([profile, items, records]) => {
+=======
+    // Boot paralelo: perfil + inventário em Promise.all
+    Promise.all([
+      getMe(),
+      loadInventory(),
+    ]).then(([profile, items]) => {
+>>>>>>> 801053e (perf: Promise.all boot, lazy tabs (InventoryManager/EquipeTab/ReportSection), skeleton on painel)
       setBooting(false);
       if (!profile) {
         // Token inválido/expirado — localStorage já foi limpo por getMe
@@ -165,7 +183,10 @@ function DashboardInner() {
       setUserProfile(profile);
       setUsername(resolveDisplayName(profile));
       setInvItems(items);
+<<<<<<< HEAD
       setAnalysisRecords(records);
+=======
+>>>>>>> 801053e (perf: Promise.all boot, lazy tabs (InventoryManager/EquipeTab/ReportSection), skeleton on painel)
       if (!profile.nome_exibicao || !profile.username) {
         setShowOnboarding(true);
       }
