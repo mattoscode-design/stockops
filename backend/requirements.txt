@@ -16,3 +16,4 @@ slowapi==0.1.9
 python-dotenv==1.0.1
 pydantic==2.9.2
 supabase==2.10.0
+resend==2.10.0

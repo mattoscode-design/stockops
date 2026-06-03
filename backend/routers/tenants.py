@@ -103,14 +103,21 @@ def _fetch_invite_by_token(token: str) -> dict:
 def search_tenants(
     request: Request,
     q: str = Query(
-        default="", description="Busca por nome (parcial, case-insensitive)"
+        default="", description="Busca por nome ou @slug (parcial, case-insensitive)"
     ),
     current_user: dict = Depends(get_current_user),
 ):
-    """Busca tenants pelo nome. Retorna até 20 resultados."""
-    query = supabase.table("tenants").select("id, name, slug, plan")
-    if q.strip():
-        query = query.ilike("name", f"%{q.strip()}%")
+    """Busca tenants por nome ou slug. Se q começa com @, busca só por slug. Retorna até 20 resultados."""
+    base = supabase.table("tenants").select("id, name, slug, plan")
+    term = q.strip()
+    if term:
+        if term.startswith("@"):
+            slug_term = term[1:]
+            query = base.ilike("slug", f"%{slug_term}%")
+        else:
+            query = base.or_(f"name.ilike.%{term}%,slug.ilike.%{term}%")
+    else:
+        query = base
     result = query.limit(20).execute()
     return result.data or []
 
@@ -426,7 +433,11 @@ def list_join_requests(
     ),
     current_user: dict = Depends(get_current_user),
 ):
-    """Lista solicitações de entrada no próprio tenant. Restrito a admins."""
+    """Lista solicitações de entrada no próprio tenant. Restrito a admins.
+
+    Cada item é enriquecido com email, nome_exibicao e username do solicitante.
+    O campo created_at é renomeado para requested_at.
+    """
     _require_admin_role(current_user)
     try:
         result = (
@@ -439,7 +450,37 @@ def list_join_requests(
     except APIError as e:
         _raise_if_missing_table(e, "tenant_join_requests")
         raise
-    return result.data or []
+
+    requests_data = result.data or []
+    if not requests_data:
+        return []
+
+    # Coleta user_ids únicos e busca dados dos usuários em uma query só
+    user_ids = list({r["user_id"] for r in requests_data if r.get("user_id")})
+    user_map: dict = {}
+    if user_ids:
+        try:
+            users_result = (
+                supabase.table("users")
+                .select("id, email, nome_exibicao, username")
+                .in_("id", user_ids)
+                .execute()
+            )
+            user_map = {u["id"]: u for u in (users_result.data or [])}
+        except Exception as exc:
+            logger.warning("Falha ao buscar dados de usuários para join-requests: %s", exc)
+
+    enriched = []
+    for req in requests_data:
+        item = dict(req)
+        item["requested_at"] = item.pop("created_at", None)
+        user_data = user_map.get(item.get("user_id"), {})
+        item["email"] = user_data.get("email")
+        item["nome_exibicao"] = user_data.get("nome_exibicao")
+        item["username"] = user_data.get("username")
+        enriched.append(item)
+
+    return enriched
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -572,11 +613,14 @@ def list_members(
 
     result = (
         supabase.table("users")
-        .select("id, email, username, nome_exibicao, role, tipo_perfil")
+        .select("id, email, username, nome_exibicao, role, tipo_perfil, created_at")
         .eq("tenant_id", current_user["tenant_id"])
         .execute()
     )
-    return result.data or []
+    members = result.data or []
+    for m in members:
+        m["joined_at"] = m.pop("created_at", None)
+    return members
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,34 +1,27 @@
 """
-Email Service — Envio de emails transacionais via SMTP.
-
-Configurado para Gmail com App Password. Todas as funções são best-effort:
-registram erro no log mas nunca levantam exceção para o caller.
+Email Service — Envio de emails transacionais via Resend.
 
 Variáveis de ambiente necessárias:
-  SMTP_HOST      (padrão: smtp.gmail.com)
-  SMTP_PORT      (padrão: 587)
-  SMTP_USER      ex: stockopsautenticador@gmail.com
-  SMTP_PASSWORD  App Password de 16 chars gerado no Google Account
-  FRONTEND_URL   ex: https://stockops.vercel.app (padrão: http://localhost:3000)
+  RESEND_API_KEY  Chave da API Resend (re_...). Obtenha em: https://resend.com/api-keys
+  RESEND_FROM     Remetente verificado no Resend (padrão: StockOps <noreply@stockops.app>)
+  FRONTEND_URL    URL do frontend (padrão: http://localhost:3000)
+
+Se RESEND_API_KEY não estiver configurada, as funções logam um aviso e retornam
+sem lançar exceção — o fluxo do caller não é interrompido.
 """
 
 import logging
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 logger = logging.getLogger("stockops.email_service")
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM = os.getenv("RESEND_FROM", "StockOps <noreply@stockops.app>")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
-def _smtp_enabled() -> bool:
-    return bool(SMTP_USER and SMTP_PASSWORD)
+def _resend_enabled() -> bool:
+    return bool(RESEND_API_KEY)
 
 
 def send_invite_email(
@@ -38,10 +31,10 @@ def send_invite_email(
     token: str,
 ) -> None:
     """
-    Envia email de convite para entrar em um tenant.
+    Envia email de convite para entrar em um tenant via Resend.
 
-    Best-effort: loga o erro mas nunca levanta exceção.
-    Se SMTP_USER/SMTP_PASSWORD não estiverem configurados, apenas loga aviso.
+    Best-effort: loga o erro mas nunca lança exceção para o caller.
+    Se RESEND_API_KEY não estiver configurada, apenas loga aviso e retorna.
 
     Args:
         to_email: Destinatário do convite.
@@ -49,20 +42,24 @@ def send_invite_email(
         inviter_name: Nome de exibição de quem convidou.
         token: Token do convite (usado para montar o link).
     """
-    if not _smtp_enabled():
+    if not _resend_enabled():
         logger.warning(
-            "SMTP não configurado (SMTP_USER/SMTP_PASSWORD ausentes) — "
-            "email de convite não enviado para %s",
+            "RESEND_API_KEY não configurada — email de convite não enviado para %s. "
+            "Adicione RESEND_API_KEY ao .env para habilitar o envio.",
             to_email,
         )
         return
+
+    import resend  # importação tardia para não falhar se pacote não instalado
+
+    resend.api_key = RESEND_API_KEY
 
     invite_link = f"{FRONTEND_URL}/invite?token={token}"
     subject = f"Você foi convidado para entrar em {tenant_name} no StockOps"
 
     body_text = (
         f"{inviter_name} te convidou para entrar em {tenant_name} no StockOps.\n\n"
-        f"Acesse o link para entrar:\n{invite_link}\n\n"
+        f"Acesse o link para aceitar o convite:\n{invite_link}\n\n"
         f"O link expira em 7 dias."
     )
     body_html = f"""<!DOCTYPE html>
@@ -81,25 +78,19 @@ def send_invite_email(
 </body>
 </html>"""
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = SMTP_USER
-    msg["To"] = to_email
-    msg.attach(MIMEText(body_text, "plain", "utf-8"))
-    msg.attach(MIMEText(body_html, "html", "utf-8"))
-
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_USER, [to_email], msg.as_string())
-        logger.info("Email de convite enviado: %s → %s", SMTP_USER, to_email)
-    except smtplib.SMTPAuthenticationError:
-        logger.error(
-            "Falha de autenticação SMTP — verifique SMTP_USER e SMTP_PASSWORD"
+        params: resend.Emails.SendParams = {
+            "from": RESEND_FROM,
+            "to": [to_email],
+            "subject": subject,
+            "html": body_html,
+            "text": body_text,
+        }
+        response = resend.Emails.send(params)
+        logger.info(
+            "Email de convite enviado via Resend: id=%s → %s",
+            response.get("id") if isinstance(response, dict) else getattr(response, "id", "?"),
+            to_email,
         )
-    except smtplib.SMTPRecipientsRefused:
-        logger.error("Destinatário recusado pelo servidor SMTP: %s", to_email)
     except Exception as e:
-        logger.error("Falha ao enviar email de convite para %s: %s", to_email, e)
+        logger.error("Falha ao enviar email de convite para %s via Resend: %s", to_email, e)
