@@ -204,9 +204,6 @@ export default function EquipeTab() {
                   </div>
                   <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 1 }}>
                     {m.email}
-                    {m.username && (
-                      <span style={{ marginLeft: 6, fontFamily: "monospace" }}>@{m.username}</span>
-                    )}
                   </div>
                 </div>
 
@@ -277,9 +274,6 @@ export default function EquipeTab() {
                   </div>
                   <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 1 }}>
                     {r.email}
-                    {r.username && (
-                      <span style={{ marginLeft: 6, fontFamily: "monospace" }}>@{r.username}</span>
-                    )}
                     <span style={{ marginLeft: 8 }}>· Solicitado em {formatDate(r.requested_at)}</span>
                   </div>
                 </div>
