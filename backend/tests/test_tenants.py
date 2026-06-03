@@ -134,8 +134,9 @@ class TestSearchTenants:
         assert resp.json()[0]["id"] == TENANT_ID
 
     def test_busca_com_query_aplica_filtro(self, team_client):
+        # q sem @ → usa or_(name ilike OR slug ilike)
         client, mock_sb, _ = team_client
-        mock_sb.table.return_value.select.return_value.ilike.return_value.limit.return_value.execute.return_value = MagicMock(
+        mock_sb.table.return_value.select.return_value.or_.return_value.limit.return_value.execute.return_value = MagicMock(
             data=[MOCK_TENANT_ROW]
         )
         resp = client.get("/team/tenants/search?q=empresa")
@@ -143,13 +144,24 @@ class TestSearchTenants:
         assert len(resp.json()) == 1
 
     def test_sem_resultados_retorna_lista_vazia(self, team_client):
+        # q sem @ → usa or_; sem resultados retorna []
         client, mock_sb, _ = team_client
-        mock_sb.table.return_value.select.return_value.ilike.return_value.limit.return_value.execute.return_value = MagicMock(
+        mock_sb.table.return_value.select.return_value.or_.return_value.limit.return_value.execute.return_value = MagicMock(
             data=[]
         )
         resp = client.get("/team/tenants/search?q=inexistente")
         assert resp.status_code == 200
         assert resp.json() == []
+
+    def test_busca_por_slug_com_arroba(self, team_client):
+        # q com @ → usa ilike só no slug
+        client, mock_sb, _ = team_client
+        mock_sb.table.return_value.select.return_value.ilike.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[MOCK_TENANT_ROW]
+        )
+        resp = client.get("/team/tenants/search?q=@empresa-abc")
+        assert resp.status_code == 200
+        assert resp.json()[0]["slug"] == "empresa-abc"
 
     def test_sem_auth_retorna_401(self, team_client_no_auth):
         client, _ = team_client_no_auth

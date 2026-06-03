@@ -45,8 +45,6 @@ export default function HistoryPanel({ entries, onSelect, onClear, onDelete }: P
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  if (entries.length === 0) return null;
-
   async function handleClear() {
     if (!confirm("Limpar todo o histórico de análises?")) return;
     await onClear();
@@ -78,9 +76,11 @@ export default function HistoryPanel({ entries, onSelect, onClear, onDelete }: P
           e.currentTarget.style.color = "var(--muted)";
         }}>
         <span>Histórico</span>
-        <span className="font-mono font-bold" style={{ color: "var(--amber)" }}>
-          {entries.length}
-        </span>
+        {entries.length > 0 && (
+          <span className="font-mono font-bold" style={{ color: "var(--amber)" }}>
+            {entries.length}
+          </span>
+        )}
       </button>
 
       {open && (
@@ -94,32 +94,44 @@ export default function HistoryPanel({ entries, onSelect, onClear, onDelete }: P
               style={{ color: "var(--muted)" }}>
               Análises Anteriores
             </span>
-            <button onClick={handleClear} className="text-xs cursor-pointer"
-              style={{ color: "var(--red)" }}>
-              Limpar
-            </button>
-          </div>
-
-          {/* Filtro de período */}
-          <div className="flex items-center gap-1 px-4 py-2" style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
-            {(["7d", "30d", "all"] as Period[]).map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className="text-xs px-2 py-1 rounded cursor-pointer transition-colors"
-                style={{
-                  fontFamily: "monospace", fontWeight: period === p ? 700 : 400,
-                  background: period === p ? "var(--ink)" : "transparent",
-                  color: period === p ? "var(--bone)" : "var(--muted)",
-                  border: "1px solid " + (period === p ? "var(--ink)" : "transparent"),
-                }}>
-                {p === "7d" ? "7 dias" : p === "30d" ? "30 dias" : "Tudo"}
+            {entries.length > 0 && (
+              <button onClick={handleClear} className="text-xs cursor-pointer"
+                style={{ color: "var(--red)" }}>
+                Limpar
               </button>
-            ))}
-            <span className="text-xs ml-auto" style={{ color: "var(--muted)", fontFamily: "monospace" }}>
-              {visibleEntries.length}/{entries.length}
-            </span>
+            )}
           </div>
 
-          {visibleEntries.length === 0 && (
+          {/* Empty state quando não há histórico */}
+          {entries.length === 0 && (
+            <div className="px-4 py-8 text-center">
+              <p className="text-xs font-medium" style={{ color: "var(--text)" }}>Nenhuma análise ainda.</p>
+              <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Faça upload de um arquivo para começar.</p>
+            </div>
+          )}
+
+          {/* Filtro de período — só aparece quando há entradas */}
+          {entries.length > 0 && (
+            <div className="flex items-center gap-1 px-4 py-2" style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+              {(["7d", "30d", "all"] as Period[]).map(p => (
+                <button key={p} onClick={() => setPeriod(p)}
+                  className="text-xs px-2 py-1 rounded cursor-pointer transition-colors"
+                  style={{
+                    fontFamily: "monospace", fontWeight: period === p ? 700 : 400,
+                    background: period === p ? "var(--ink)" : "transparent",
+                    color: period === p ? "var(--bone)" : "var(--muted)",
+                    border: "1px solid " + (period === p ? "var(--ink)" : "transparent"),
+                  }}>
+                  {p === "7d" ? "7 dias" : p === "30d" ? "30 dias" : "Tudo"}
+                </button>
+              ))}
+              <span className="text-xs ml-auto" style={{ color: "var(--muted)", fontFamily: "monospace" }}>
+                {visibleEntries.length}/{entries.length}
+              </span>
+            </div>
+          )}
+
+          {entries.length > 0 && visibleEntries.length === 0 && (
             <div className="px-4 py-6 text-center text-xs" style={{ color: "var(--muted)" }}>
               Nenhuma análise no período.
             </div>

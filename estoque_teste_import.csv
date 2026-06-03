@@ -1,0 +1,21 @@
+sku,loja,categoria,estoque_atual,vendas_diarias,preco_medio,vendas_7d,regularidade_abastecimento
+SKU-001,Loja Centro,Bebidas,45,18.5,8.90,129.5,0.85
+SKU-002,Loja Centro,Bebidas,8,12.0,12.50,84.0,0.70
+SKU-003,Loja Norte,Laticínios,120,6.2,5.40,43.4,0.95
+SKU-004,Loja Norte,Laticínios,2,9.8,7.20,68.6,0.60
+SKU-005,Loja Sul,Higiene,30,4.1,15.90,28.7,0.90
+SKU-006,Loja Sul,Higiene,0,7.5,18.00,52.5,0.75
+SKU-007,Loja Centro,Alimentos,55,3.0,22.00,21.0,0.98
+SKU-008,Loja Leste,Bebidas,14,15.2,6.50,106.4,0.65
+SKU-009,Loja Leste,Alimentos,3,11.0,9.80,77.0,0.55
+SKU-010,Loja Norte,Bebidas,90,5.5,11.20,38.5,0.92
+SKU-011,Loja Sul,Limpeza,6,20.0,4.30,140.0,0.45
+SKU-012,Loja Centro,Limpeza,40,2.8,31.50,19.6,0.88
+SKU-013,Loja Leste,Laticínios,1,8.4,6.90,58.8,0.50
+SKU-014,Loja Norte,Higiene,18,6.0,24.90,42.0,0.80
+SKU-015,Loja Sul,Bebidas,25,25.0,3.80,175.0,0.40
+SKU-016,Loja Centro,Alimentos,70,1.5,45.00,10.5,0.99
+SKU-017,Loja Leste,Higiene,0,14.0,9.20,98.0,0.62
+SKU-018,Loja Norte,Limpeza,12,3.5,17.60,24.5,0.78
+SKU-019,Loja Sul,Alimentos,5,22.5,7.10,157.5,0.48
+SKU-020,Loja Centro,Bebidas,200,8.0,14.30,56.0,0.97
