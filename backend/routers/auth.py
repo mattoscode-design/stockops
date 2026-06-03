@@ -290,7 +290,10 @@ def forgot_password(request: Request, data: ForgotPassword):
     Rate limit: 3/minute por IP.
     """
     try:
-        supabase_auth.auth.reset_password_for_email(data.email)
+        supabase_auth.auth.reset_password_for_email(
+            data.email,
+            options={"redirect_to": "https://stockops-five.vercel.app/auth/reset-password"},
+        )
         logger.info(f"Reset de senha solicitado para {data.email}")
     except Exception as e:
         logger.warning(f"Erro ao enviar reset de senha para {data.email}: {e}")
