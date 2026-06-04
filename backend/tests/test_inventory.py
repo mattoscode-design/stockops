@@ -255,3 +255,68 @@ class TestDeleteItem:
 
         resp = client.delete("/inventory/item-de-outro-tenant")
         assert resp.status_code == 404
+
+
+# ────────────────────────────────────────────────────────────
+# GET /inventory/projection
+# ────────────────────────────────────────────────────────────
+
+class TestGetProjection:
+    ITEMS = [
+        {"estoque_atual": 100, "vendas_diarias": 10, "preco_medio": 5.0, "data_validade": None},
+        {"estoque_atual": 50,  "vendas_diarias": 5,  "preco_medio": 10.0, "data_validade": None},
+    ]
+
+    def test_retorna_projecao_sem_vencimento(self, app_client):
+        client, mock_sb = app_client
+        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=self.ITEMS
+        )
+        resp = client.get("/inventory/projection")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["receita_potencial_total"] == pytest.approx(100*5 + 50*10)
+        assert body["receita_projetada_7d"] == pytest.approx((10*5 + 5*10) * 7)
+        assert body["receita_projetada_30d"] == pytest.approx((10*5 + 5*10) * 30)
+        assert body["perda_por_vencimento"] == 0.0
+        assert body["receita_liquida_projetada"] == pytest.approx(body["receita_projetada_30d"])
+
+    def test_perda_por_vencimento_calculada(self, app_client):
+        from datetime import date, timedelta
+        client, mock_sb = app_client
+        validade = (date.today() + timedelta(days=5)).isoformat()
+        items = [{"estoque_atual": 100, "vendas_diarias": 10, "preco_medio": 5.0, "data_validade": validade}]
+        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=items
+        )
+        resp = client.get("/inventory/projection")
+        assert resp.status_code == 200
+        body = resp.json()
+        # perda = (100 - 10*5) * 5 = 250
+        assert body["perda_por_vencimento"] == pytest.approx(250.0)
+        assert body["receita_liquida_projetada"] == pytest.approx(body["receita_projetada_30d"] - 250.0)
+
+    def test_lista_vazia_retorna_zeros(self, app_client):
+        client, mock_sb = app_client
+        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+        resp = client.get("/inventory/projection")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["receita_potencial_total"] == 0.0
+        assert body["perda_por_vencimento"] == 0.0
+
+    def test_sem_tenant_retorna_401(self, app_client):
+        """Usuário sem tenant_id recebe 401."""
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from routers.inventory import router
+        from middleware.auth import get_current_user
+        from unittest.mock import patch
+
+        no_tenant_app = FastAPI()
+        no_tenant_app.include_router(router)
+        no_tenant_app.dependency_overrides[get_current_user] = lambda: {"tenant_id": None, "user_id": "u1"}
+        with patch("routers.inventory.supabase"):
+            client2 = TestClient(no_tenant_app, raise_server_exceptions=False)
+            resp = client2.get("/inventory/projection")
+        assert resp.status_code == 401

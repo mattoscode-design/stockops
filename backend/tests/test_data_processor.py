@@ -210,3 +210,44 @@ class TestCalcularImpacto:
         df_base  = calcular_impacto(pd.DataFrame([self._row(promocao_planejada=0.0)]))
         df_promo = calcular_impacto(pd.DataFrame([self._row(promocao_planejada=0.5)]))
         assert df_promo["perda_estimada_reais"].iloc[0] > df_base["perda_estimada_reais"].iloc[0]
+
+
+class TestValidadeAlertaPerda:
+    """Task #13 — validade_alerta e perda_validade no AnalysisResponse."""
+
+    BASE = dict(loja="L1", estoque_atual=100, vendas_diarias=10, preco_medio=5.0)
+
+    def _run(self, row: dict):
+        from services.pipeline_service import run_analysis_pipeline
+        df = pd.DataFrame([dict(sku="SKU-T", **row)])
+        return run_analysis_pipeline(df).resultados[0]
+
+    def test_sem_validade_alerta_false_perda_zero(self):
+        r = self._run(self.BASE)
+        assert r.validade_alerta is False
+        assert r.perda_validade == 0.0
+
+    def test_validade_futura_alem_cobertura_sem_alerta(self):
+        """Estoque 100, vendas 10 → cobertura 10 dias. Validade em 30 dias → sem alerta."""
+        from datetime import date, timedelta
+        validade = (date.today() + timedelta(days=30)).isoformat()
+        r = self._run({**self.BASE, "data_validade": validade})
+        assert r.validade_alerta is False
+        assert r.perda_validade == 0.0
+
+    def test_validade_dentro_cobertura_gera_alerta_e_perda(self):
+        """Estoque 100, vendas 10 → cobertura 10 dias. Validade em 5 dias → alerta.
+        Perda = (100 - 10*5) * 5 = 250.
+        """
+        from datetime import date, timedelta
+        validade = (date.today() + timedelta(days=5)).isoformat()
+        r = self._run({**self.BASE, "data_validade": validade})
+        assert r.validade_alerta is True
+        assert r.perda_validade == pytest.approx(250.0)
+
+    def test_perda_validade_nao_negativa(self):
+        """Estoque pequeno: perda não pode ser negativa."""
+        from datetime import date, timedelta
+        validade = (date.today() + timedelta(days=5)).isoformat()
+        r = self._run({**self.BASE, "estoque_atual": 40, "data_validade": validade})
+        assert r.perda_validade >= 0.0
