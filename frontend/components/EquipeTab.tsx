@@ -9,6 +9,8 @@ import {
   rejectJoinRequest,
   inviteMember,
   removeMember,
+  getCachedProfile,
+  getMe,
 } from "@/lib/api";
 import type { TenantUser, JoinRequest } from "@/types/tenant";
 
@@ -40,6 +42,20 @@ export default function EquipeTab() {
   const [copied,      setCopied]      = useState(false);
   // Mapa de IDs em processamento (approve/reject/remove)
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+
+  // Roles com permissão de gestão — 'manager' será adicionado na F2
+  const MANAGE_ROLES = ["empresa"];
+  const [canManage, setCanManage] = useState<boolean>(() => {
+    const cached = getCachedProfile();
+    return cached ? MANAGE_ROLES.includes(cached.tipo_perfil ?? "") : false;
+  });
+
+  useEffect(() => {
+    getMe().then(profile => {
+      if (profile) setCanManage(MANAGE_ROLES.includes(profile.tipo_perfil ?? ""));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -229,8 +245,8 @@ export default function EquipeTab() {
                   {formatDate(m.joined_at)}
                 </span>
 
-                {/* Remover — não disponível para proprietário */}
-                {m.tipo_perfil !== "empresa" && (
+                {/* Remover — apenas admins, não disponível para o próprio proprietário */}
+                {canManage && m.tipo_perfil !== "empresa" && (
                   <button
                     style={{ ...btnDanger, opacity: busy[m.id] ? 0.5 : 1 }}
                     disabled={busy[m.id]}
@@ -246,8 +262,8 @@ export default function EquipeTab() {
         )}
       </div>
 
-      {/* ── Solicitações pendentes ──────────────────────────────────── */}
-      <div style={CARD}>
+      {/* ── Solicitações pendentes — visível apenas para admins ───── */}
+      {canManage && <div style={CARD}>
         <div style={sectionTitle}>
           <Clock size={16} />
           Solicitações pendentes ({requests.length})
@@ -302,10 +318,10 @@ export default function EquipeTab() {
             ))}
           </div>
         )}
-      </div>
+      </div>}
 
-      {/* ── Convidar por e-mail ─────────────────────────────────────── */}
-      <div style={CARD}>
+      {/* ── Convidar por e-mail — visível apenas para admins ──────── */}
+      {canManage && <div style={CARD}>
         <div style={sectionTitle}>
           <Mail size={16} />
           Convidar por e-mail
@@ -364,7 +380,7 @@ export default function EquipeTab() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
