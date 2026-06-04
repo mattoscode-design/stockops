@@ -61,10 +61,23 @@ def run_analysis_pipeline(df: pd.DataFrame) -> AnalysisSummary:
 
     resultados = []
     for row in df.to_dict("records"):
-        # F2 — validade: calcular dias restantes e aplicar boost no score se necessário
+        # Validade: dias restantes, alerta e perda por vencimento
         validade_dias = _calcular_validade_dias(row.get("data_validade"))
         score = float(row["score_ruptura"])
-        if validade_dias is not None and validade_dias < row["cobertura_dias"]:
+        validade_alerta = False
+        perda_validade = 0.0
+
+        if validade_dias is not None and validade_dias > 0:
+            estoque = float(row["estoque_atual"])
+            vendas = float(row["vendas_diarias"])
+            preco = float(row["preco_medio"])
+            cobertura = estoque / vendas if vendas > 0 else 0.0
+            if cobertura > validade_dias:
+                validade_alerta = True
+                unidades_perdidas = estoque - vendas * validade_dias
+                perda_validade = round(max(0.0, unidades_perdidas) * preco, 2)
+                score = min(100.0, score + VALIDADE_SCORE_BOOST)
+        elif validade_dias is not None and validade_dias < row["cobertura_dias"]:
             score = min(100.0, score + VALIDADE_SCORE_BOOST)
 
         insight, recomendacao = gerar_insight_estatico(
@@ -92,6 +105,8 @@ def run_analysis_pipeline(df: pd.DataFrame) -> AnalysisSummary:
             quantidade_recomendada=row["quantidade_recomendada"],
             receita_potencial=receita_potencial,
             validade_dias_restantes=validade_dias,
+            validade_alerta=validade_alerta,
+            perda_validade=perda_validade,
             insight=insight,
             recomendacao=recomendacao,
         ))

@@ -178,16 +178,27 @@ class TestSendInvite:
     PAYLOAD = {"email": "novo@empresa.com", "role": "viewer"}
 
     def _mock_invite_success(self, mock_sb):
-        """Configura mock para criação de convite bem-sucedida (sem pendente existente)."""
+        """Configura mock para criação de convite bem-sucedida (sem pendente existente).
+
+        Chains por nº de .eq():
+          1-eq → tenant name lookup        → data=[{"name": "Empresa ABC"}]
+          2-eq → member check (users)      → data=[] (não é membro)
+          3-eq → invite check (pendente)   → data=[] (sem pendente)
+        """
+        # 1-eq: tenant name
+        mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[{"name": "Empresa ABC"}]
+        )
+        # 2-eq: member check → não é membro
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+        # 3-eq: invite check → sem pendente
         mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
             data=[]
         )
         mock_sb.table.return_value.insert.return_value.execute.return_value = MagicMock(
             data=[{"id": INVITE_ID}]
-        )
-        # tenant name lookup (select.eq.limit.execute)
-        mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
-            data=[{"name": "Empresa ABC"}]
         )
 
     def test_admin_convida_com_sucesso(self, team_client):
@@ -219,14 +230,44 @@ class TestSendInvite:
         call_kwargs = mock_email.call_args
         assert call_kwargs[1]["to_email"] == "novo@empresa.com" or call_kwargs[0][0] == "novo@empresa.com"
 
-    def test_convite_pendente_existente_retorna_400(self, team_client):
+    def test_reenvio_quando_convite_pendente_existe(self, team_client):
+        """Convite pendente → renova token, reenvia e retorna 201 (não bloqueia mais)."""
         client, mock_sb, _ = team_client
+        # 1-eq: tenant name
+        mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[{"name": "Empresa ABC"}]
+        )
+        # 2-eq: member check → não é membro
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+        # 3-eq: invite check → pendente existe
         mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
-            data=[{"id": "existing"}]
+            data=[{"id": INVITE_ID}]
+        )
+        mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{}]
+        )
+        with patch("services.email_service.send_invite_email"):
+            resp = client.post("/team/invites", json=self.PAYLOAD)
+        assert resp.status_code == 201
+        assert resp.json()["message"] == "Convite reenviado com sucesso"
+        assert "token" in resp.json()
+
+    def test_email_ja_membro_retorna_400(self, team_client):
+        """Email já membro do tenant deve ser bloqueado com 400."""
+        client, mock_sb, _ = team_client
+        # 1-eq: tenant name
+        mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[{"name": "Empresa ABC"}]
+        )
+        # 2-eq: member check → já é membro
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[{"id": USER_ID}]
         )
         resp = client.post("/team/invites", json=self.PAYLOAD)
         assert resp.status_code == 400
-        assert "pendente" in resp.json()["detail"]
+        assert "membro" in resp.json()["detail"]
 
     def test_role_invalido_retorna_422(self, team_client):
         client, _, _ = team_client

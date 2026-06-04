@@ -17,6 +17,8 @@ class AnalysisResponse(BaseModel):
     quantidade_recomendada: float
     receita_potencial: float
     validade_dias_restantes: Optional[int] = None
+    validade_alerta: bool = False
+    perda_validade: float = 0.0
     insight: str
     recomendacao: str
 

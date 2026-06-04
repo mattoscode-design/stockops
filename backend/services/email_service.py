@@ -21,13 +21,6 @@ logger = logging.getLogger("stockops.email_service")
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
-
-
-def _smtp_enabled() -> bool:
-    return bool(SMTP_USER and SMTP_PASSWORD)
 
 
 def send_invite_email(
@@ -40,7 +33,7 @@ def send_invite_email(
     Envia email de convite para entrar em um tenant via Gmail SMTP.
 
     Best-effort: loga o erro mas nunca lança exceção para o caller.
-    Se EMAIL_USER/EMAIL_PASSWORD não estiverem configurados, loga warning
+    Se SMTP_USER/SMTP_PASSWORD não estiverem configurados, loga erro
     com o link do convite e retorna sem quebrar o fluxo.
 
     Args:
@@ -49,12 +42,18 @@ def send_invite_email(
         inviter_name: Nome de exibição de quem convidou.
         token: Token do convite (usado para montar o link).
     """
-    invite_link = f"{FRONTEND_URL}/invite?token={token}"
+    # Lê vars em tempo de chamada (não no import) para garantir que o .env já foi carregado
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
-    if not _smtp_enabled():
-        logger.warning(
-            "SMTP_USER/SMTP_PASSWORD não configurados — email de convite não enviado. "
-            "Link do convite: %s",
+    invite_link = f"{frontend_url}/invite?token={token}"
+
+    if not (smtp_user and smtp_password):
+        logger.error(
+            "SMTP_USER/SMTP_PASSWORD não configurados — email de convite NÃO enviado para %s. "
+            "Configure essas variáveis de ambiente no Render. Link do convite: %s",
+            to_email,
             invite_link,
         )
         return
@@ -84,7 +83,7 @@ def send_invite_email(
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = SMTP_USER
+    msg["From"] = smtp_user
     msg["To"] = to_email
     msg.attach(MIMEText(body_text, "plain", "utf-8"))
     msg.attach(MIMEText(body_html, "html", "utf-8"))
@@ -93,15 +92,18 @@ def send_invite_email(
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
             server.ehlo()
             server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_USER, [to_email], msg.as_string())
-        logger.info("Email de convite enviado: %s → %s", SMTP_USER, to_email)
-    except smtplib.SMTPAuthenticationError:
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, [to_email], msg.as_string())
+        logger.info("Email de convite enviado com sucesso: %s → %s", smtp_user, to_email)
+    except smtplib.SMTPAuthenticationError as e:
         logger.error(
-            "Falha de autenticação SMTP — verifique SMTP_USER e SMTP_PASSWORD. "
-            "SMTP_PASSWORD deve ser um App Password, não a senha da conta Google."
+            "Falha de autenticação SMTP (SMTP_USER=%s): %s. "
+            "SMTP_PASSWORD deve ser um App Password do Google, não a senha da conta.",
+            smtp_user, e,
         )
-    except smtplib.SMTPRecipientsRefused:
-        logger.error("Destinatário recusado pelo servidor SMTP: %s", to_email)
+    except smtplib.SMTPRecipientsRefused as e:
+        logger.error("Destinatário recusado pelo servidor SMTP: %s — %s", to_email, e)
+    except smtplib.SMTPException as e:
+        logger.error("Erro SMTP ao enviar email para %s: %s", to_email, e)
     except Exception as e:
-        logger.error("Falha ao enviar email de convite para %s: %s", to_email, e)
+        logger.error("Erro inesperado ao enviar email de convite para %s: %s", to_email, e)
