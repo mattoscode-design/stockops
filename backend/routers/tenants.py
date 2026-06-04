@@ -19,7 +19,7 @@ Endpoints (10):
 
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from postgrest.exceptions import APIError
@@ -136,14 +136,52 @@ def send_invite(
 ):
     """
     Admin convida usuário por email para o próprio tenant.
-    Rejeita se já houver convite pendente para o mesmo email.
+
+    Regras:
+    - Bloqueia se o email já é membro ativo do tenant.
+    - Se já existe convite pendente → renova token + expires_at e reenvia.
+    - Caso contrário → cria novo convite.
     Retorna token para o frontend construir o link de aceite.
     """
     _require_admin_role(current_user)
     tenant_id = current_user["tenant_id"]
-    # Normaliza email para evitar duplicatas por case/espaços
     normalized_email = data.email.strip().lower()
 
+    # Task #9 — busca nome do tenant ANTES de qualquer operação,
+    # usando explicitamente current_user["tenant_id"]
+    try:
+        tenant_result = (
+            supabase.table("tenants")
+            .select("name")
+            .eq("id", tenant_id)
+            .limit(1)
+            .execute()
+        )
+        if not tenant_result.data:
+            raise HTTPException(status_code=404, detail="Tenant não encontrado")
+        tenant_name = tenant_result.data[0]["name"]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Falha ao buscar nome do tenant %s: %s", tenant_id, exc)
+        tenant_name = tenant_id
+
+    # Task #10 — bloqueia somente se o email já é membro ativo
+    member_result = (
+        supabase.table("users")
+        .select("id")
+        .eq("tenant_id", tenant_id)
+        .eq("email", normalized_email)
+        .limit(1)
+        .execute()
+    )
+    if member_result.data:
+        raise HTTPException(
+            status_code=400,
+            detail="Este email já é membro deste tenant",
+        )
+
+    # Verifica convite pendente existente
     try:
         existing = (
             supabase.table("tenant_invites")
@@ -157,12 +195,46 @@ def send_invite(
     except APIError as e:
         _raise_if_missing_table(e, "tenant_invites")
         raise
-    if existing.data:
-        raise HTTPException(
-            status_code=400,
-            detail="Já existe um convite pendente para este email neste tenant",
-        )
 
+    inviter_name = (
+        current_user.get("nome_exibicao")
+        or current_user.get("username")
+        or current_user["email"]
+    )
+    from services.email_service import send_invite_email  # noqa: PLC0415
+
+    # Task #10 — pendente existe → renova token e prazo, reenvia
+    if existing.data:
+        token = secrets.token_urlsafe(32)
+        new_expires = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        try:
+            supabase.table("tenant_invites").update(
+                {
+                    "token": token,
+                    "expires_at": new_expires,
+                    "invited_by": current_user["user_id"],
+                    "role": data.role,
+                }
+            ).eq("id", existing.data[0]["id"]).execute()
+        except APIError as e:
+            _raise_if_missing_table(e, "tenant_invites")
+            raise
+        send_invite_email(
+            to_email=normalized_email,
+            tenant_name=tenant_name,
+            inviter_name=inviter_name,
+            token=token,
+        )
+        logger.info(
+            "Convite reenviado: tenant=%s → %s (role=%s)", tenant_id, normalized_email, data.role
+        )
+        return {
+            "message": "Convite reenviado com sucesso",
+            "token": token,
+            "invited_email": normalized_email,
+        }
+
+    # Novo convite
     token = secrets.token_urlsafe(32)
     try:
         result = (
@@ -186,33 +258,12 @@ def send_invite(
     if not result.data:
         raise HTTPException(status_code=500, detail="Erro ao criar convite")
 
-    # Busca nome do tenant para o email (best-effort — não bloqueia em falha)
-    try:
-        tenant_result = (
-            supabase.table("tenants")
-            .select("name")
-            .eq("id", tenant_id)
-            .limit(1)
-            .execute()
-        )
-        tenant_name = tenant_result.data[0]["name"] if tenant_result.data else tenant_id
-    except Exception:
-        tenant_name = tenant_id
-
-    inviter_name = (
-        current_user.get("nome_exibicao")
-        or current_user.get("username")
-        or current_user["email"]
-    )
-
-    from services.email_service import send_invite_email  # noqa: PLC0415
     send_invite_email(
         to_email=normalized_email,
         tenant_name=tenant_name,
         inviter_name=inviter_name,
         token=token,
     )
-
     logger.info(
         "Convite criado: tenant=%s → %s (role=%s)", tenant_id, normalized_email, data.role
     )
