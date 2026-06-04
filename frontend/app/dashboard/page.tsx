@@ -25,6 +25,7 @@ import { exportRelatorioPDF } from "@/lib/pdf";
 import type { UserProfile } from "@/lib/api";
 import ProfileModal from "@/components/ProfileModal";
 import NotificationBell from "@/components/NotificationBell";
+import FinancialProjection from "@/components/FinancialProjection";
 
 /* Lazy load pesado do recharts */
 const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), {
@@ -430,6 +431,7 @@ function DashboardInner() {
               </div>
             )}
             <PageHeader eyebrow="Gestão de Estoque" title="Inventário" subtitle="Cadastro, ajustes e análise de itens em estoque" />
+            <FinancialProjection />
             <InventoryManager
               onAnalyze={data => { handleResult(data); setTab("painel"); }}
               onLoading={setLoading}
